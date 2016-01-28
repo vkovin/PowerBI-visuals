@@ -41,7 +41,7 @@ module beachPartyApp
 
             vp.select(root)
                 .addClass("recordView")
-                .css("background", "black")         // to catch all mouse events for setting focus
+                // .css("background", "black")         // to catch all mouse events for setting focus
                 .attr("tabIndex", 0)                // allow it to accept focus
                 .attach("keydown", (e) => this.onKeyDown(e));
 

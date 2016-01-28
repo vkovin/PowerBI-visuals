@@ -49,6 +49,10 @@ module beachParty
             // AppMgrClass.current = this;
         }
 
+        public getSettingsManager(): powerbi.visuals.samples.SandDanceSettingsManager {
+            return <powerbi.visuals.samples.SandDanceSettingsManager> this.objectCache.get("settingsManager");
+        }
+
         init(canvas3dId: string, canvas2dId: string, svgId: string, fileInfoId: string, width: number, height: number,
             visStatsId?: string, gpuStatsId?: string, hitStatsId?: string, moveStatsId?: string,
             drawStatsId?: string, urlParams?: string)

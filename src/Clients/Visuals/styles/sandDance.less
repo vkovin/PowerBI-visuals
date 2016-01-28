@@ -20,17 +20,18 @@
 }
 
 .sandDance {
-    background: black;
+    // background: black;
     font-family: Tahoma, Verdana, Geneva, sans-serif;
     font-size: 11px;
     touch-action: none;
     stroke-width: 1px;
-    color: #fff;
-    stroke: #fff;
-    fill: #fff;
+    // color: #fff;
+    // stroke: #fff;
+    // fill: #fff;
     overflow: hidden;
     position: relative;
 
+    -webkit-filter: blur(0px);
     cursor: default;
 
     .canvas {
@@ -208,7 +209,7 @@
     }
 
     .clickableAxisLabel {
-        color: white;
+        // color: white;
         opacity: 0.8;
     }
 
@@ -225,9 +226,10 @@
     /* NOTE: stroke-linecap set to value other than "butt" causes line to be drawn with a anti-aliased ending */
     .vpxAxis {
         stroke: gray;
-        fill: gray;
-        font-family: Tahoma;
-        font-size: 13.33px;
+        // fill: gray;
+        // font-family: Tahoma;
+        // font-size: 13.33px;
+        font-size: 1em;
         text-anchor: middle;
         text-rendering: optimizeLegibility;
         shape-rendering: crispEdges;
@@ -266,7 +268,8 @@
     }
 
     .vpxAxisTickBox:hover {
-        fill: #333;
+        // fill: #333;
+        opacity: 0.7;
     }
 
     .vpxAxisTickBox:active {
@@ -309,20 +312,13 @@
         min-height: 52p;
         margin-left: 0;
         margin-bottom: 4px;
+        width: 100%;
     }
 
     .playPanel {
         display: none;
     }
-    // .iconBar {
-    //     margin-left: 10px;
-    //     width: 100%;
-    //     z-index: 999;
-    //     overflow-x: auto;
-    //     overflow-y : hidden;
-    //     display: none;
-    //     border: 0 solid blue
-    // }
+
     .leftPanel {
         position: absolute;
         z-index: 25;
@@ -359,11 +355,6 @@
             bottom: 10px;
             left: 20px;
 
-            .zButton,
-            .zBins {
-                //display: none;
-            }
-
             .zBins {
                 position: absolute;
                 top: -5px;
@@ -380,7 +371,7 @@
         position: absolute;
         opacity: 0;
         border: 0 solid yellow;
-        background: black;
+        // background: black;
     }
 
     .chartUxDiv {
@@ -435,7 +426,7 @@
     }
 
     .searchText {
-        color: white;
+        // color: white;
         border: 1px solid #777;
         background: black;
         font-family: Calibri;
@@ -502,11 +493,11 @@
     }
 
     .promptText {
-        color: white;
+        // color: white;
     }
 
     .editText {
-        color: white;
+        // color: white;
         border: 1px solid black;
         background: black;
         font-family: Calibri;
@@ -538,7 +529,7 @@
     }
 
     .numAdjusterValue {
-        color: white;
+        // color: white;
         opacity: 0.8;
         font-size: 12px;
         width: 26px;
@@ -551,12 +542,12 @@
         opacity: 0.8;
     }
 
-    .numAdjusterValue:hover {
-        background: #555;
-    }
+    // .numAdjusterValue:hover {
+    //     background: #555;
+    // }
 
     .numAdjusterName {
-        color: white;
+        // color: white;
         opacity: 0.83;
         font-size: 12px;
         width: 26px;
@@ -565,9 +556,9 @@
         cursor: pointer;
     }
 
-    .numAdjusterName:hover {
-        background: #555;
-    }
+    // .numAdjusterName:hover {
+    //     background: #555;
+    // }
 
     .numAdjusterImg {
         @backgroundSize: 40px;
@@ -594,7 +585,7 @@
     }
 
     .legendTitle {
-        color: white;
+        // color: white;
         opacity: 0.8;
         cursor: pointer;
         margin-bottom: 10px;
@@ -619,7 +610,7 @@
     }
 
     .legendLabel {
-        color: white;
+        // color: white;
         opacity: 0.85;
         cursor: pointer;
         white-space: nowrap;
@@ -627,7 +618,7 @@
     }
 
     .legendLabel:hover {
-        color: white;
+        // color: white;
         opacity: 0.8;
         cursor: pointer;
     }
@@ -686,7 +677,7 @@
     }
 
     .listColorPaletteName {
-        color: white;
+        // color: white;
         opacity: 0.85;
         margin: 4px;
     }
@@ -728,7 +719,7 @@
         position: absolute;
         opacity: 1;
         display: inline-block;
-        background: rgb(56, 56, 56);
+        // background: rgb(56, 56, 56);
         z-index: 1005;
         overflow: auto;
         -ms-overflow-style: auto;
@@ -738,7 +729,7 @@
         position: absolute;
         opacity: 1;
         display: inline-block;
-        background: rgb(56, 56, 56);
+        // background: rgb(56, 56, 56);
         z-index: 1005;
     }
 
@@ -773,7 +764,7 @@
     }
 
     .panelTitle {
-        color: white;
+        // color: white;
         border-bottom: 1px solid white;
         padding: 6px;
         cursor: move;
@@ -790,29 +781,29 @@
         -ms-overflow-style: auto;
     }
 
-    .panelLink:link {
-        color: #0cf;
-    }
-
-    .panelLink:visited {
-        color: #0cf;
-    }
-
-    .panelLink:active {
-        color: #0cf;
-    }
+//     .panelLink:link {
+//         color: #0cf;
+//     }
+// 
+//     .panelLink:visited {
+//         color: #0cf;
+//     }
+// 
+//     .panelLink:active {
+//         color: #0cf;
+//     }
 
     .panelLink:hover {
         background: #333;
     }
 
     .panelPrompt {
-        color: white;
+        // color: white;
         opacity: 0.86;
     }
 
     .panelText {
-        color: white;
+        // color: white;
         background: none;
         opacity: 0.85;
         padding: 4px;
@@ -820,8 +811,8 @@
     }
 
     .panelTextArea {
-        color: white;
-        background: black;
+        // color: white;
+        // background: black;
         opacity: 0.85;
         padding: 4px;
         font-family: Calibri;
@@ -850,7 +841,7 @@
     }
 
     .tabButton {
-        color: white;
+        // color: white;
         opacity: 0.5;
         cursor: pointer;
         min-width: 25px;
@@ -873,13 +864,13 @@
     }
 
     .tableHeader {
-        color: white;
+        // color: white;
         font-weight: normal;
     }
 
-    .tableValue {
-        color: white;
-    }
+    // .tableValue {
+    //     color: white;
+    // }
     /*---- RECORD VIEW (in details panel) ----*/
     .recordView:focus {
         outline: 0;
@@ -906,7 +897,7 @@
     }
 
     .rvValue {
-        color: white;
+        // color: white;
         text-align: left;
         padding-left: 4px;
         padding-right: 6px;
@@ -980,7 +971,7 @@
     /*---- INSIGHT PANEL ----*/
     .insightPanel {
         background: rgb(38, 36, 34);
-        color: white;
+        // color: white;
         width: 240px;
     }
 
@@ -1015,7 +1006,7 @@
     .insightEntry {
         border: 1px solid transparent;
         cursor: pointer;
-        color: white;
+        // color: white;
         margin: 20px;
     }
 
@@ -1130,15 +1121,15 @@
     }
     /* NUM SPREADER PANEL */
     .numSpreaderColName {
-        color: white;
+        // color: white;
     }
 
     .numSpreaderRange {
-        color: white;
+        // color: white;
     }
 
     .numSpreaderPercent {
-        color: white;
+        // color: white;
     }
 
     .chartNotes {
@@ -1146,7 +1137,7 @@
         border: 1px solid white;
         font-family: Calibri;
         font-size: 16px;
-        color: white;
+        // color: white;
         text-align: center;
         display: table;
         margin: 0 auto;
@@ -1157,7 +1148,7 @@
     }
 
     .checkboxItem {
-        color: white;
+        // color: white;
     }
 
     .checkboxItem:hover {
@@ -1174,7 +1165,7 @@
     }
     /* bug workaround: for some reason, if we specify a border on listItem, the data-selelected modifier will not work correctly */
     .listItem {
-        background: black;
+        // background: black;
         cursor: pointer;
     }
 
@@ -1183,7 +1174,7 @@
     }
 
     .wordmark {
-        color: white;
+        // color: white;
         font-size: 32px;
         padding-left: 20px;
         padding-top: 6px;
@@ -1198,15 +1189,15 @@
     }
 
     .bigBar {
-        background: rgb(28, 26, 24);
+        // background: rgb(28, 26, 24);
         width: 100%;
     }
 
     .bigBarEntry {
-        color: white;
+        // color: white;
         border: 0 solid transparent;
         cursor: pointer;
-        padding: 9px 12px;
+        padding: 8px 8px;// padding: 9px 12px;
         border-right: 0 solid black;
     }
 
@@ -1229,14 +1220,15 @@
     }
 
     .bigBarPrompt {
-        color: rgb(110, 111, 113);
+        // color: rgb(110, 111, 113);
         text-align: left;
         margin-bottom: 4px;
         white-space: nowrap;
     }
 
     .bigBarValue {
-        font-size: 14px;
+        // font-size: 14px;
+        font-size: 1.25em;
         text-align: left;
         padding-right: 3px;
         white-space: nowrap;
@@ -1246,9 +1238,9 @@
         font-weight: lighter;
     }
 
-    .noneValue {
-        color: rgb(69, 69, 69);
-    }
+    // .noneValue {
+    //     color: rgb(69, 69, 69);
+    // }
 
     .rotateRing {
         border: 4px solid white;
@@ -1312,7 +1304,7 @@
 
     .chartPickerEntry {
         padding: 3px;
-        color: white;
+        // color: white;
         cursor: pointer;
         border: 1px solid none;
     }
@@ -1361,7 +1353,7 @@
     }
 
     .insightNotesSpan {
-        color: white;
+        // color: white;
         margin: 0;
     }
 
@@ -1432,7 +1424,7 @@
     }
     /* ---- ICON/TEXT: TEXT ----*/
     .textOfCombo {
-        color: white;
+        // color: white;
         border: 0;
         background: none;
     }
@@ -1446,7 +1438,7 @@
     }
     /*--- TEXT BUTTON ----*/
     .textButton {
-        color: white;
+        // color: white;
         cursor: pointer;
         border: 1px solid none;
         background: none;
@@ -1564,7 +1556,7 @@
     }
     /*---- POPUP MENU ----*/
     .popupMenu {
-        background: black;
+        // background: black;
         border: 1px solid #555;
         padding-top: 3px;
         padding-bottom: 3px;
@@ -1606,7 +1598,7 @@
         border: 0;
         background: none;
         display: inline-block;
-        color: white;
+        // color: white;
         padding-right: 6px;
     }
 
@@ -1661,13 +1653,14 @@
     .buttonLegendCombo {
         border: 0 solid #555;
         width: 144px;
-        margin-bottom: 10px;
+        margin-bottom: 5px;
         padding-right: 4px;
     }
 
     .oldBrowserMsg {
-        color: white;
-        font-size: 22px;
+        // color: white;
+        // font-size: 22px;
+        font-size: 2em;
         margin: 20px;
         width: 100%;
     }
@@ -1735,7 +1728,7 @@
     //---- BASE CLICKABLE TEXT (used in other controls) ----
     .baseText {
         .noselect;
-        color: @clickColor;
+        // color: @clickColor;
         background-color: none;
         border: 1px solid @borderColor;
         cursor: pointer;
@@ -1872,6 +1865,7 @@
 
     .listColorPaletteItem {
         width: 225px;
+        overflow: hidden;
     }
 
     .listColorPalette {
@@ -1919,6 +1913,7 @@
 
     .fnPinLeft {
         background-image: data-uri("../images/sandDance/pinLeft.png");
+        display: none;
     }
 
     .fnPinDown,

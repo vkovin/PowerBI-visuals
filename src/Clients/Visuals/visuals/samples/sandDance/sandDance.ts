@@ -55,6 +55,54 @@ module powerbi.visuals.samples {
         }));
     } 
 
+    export class SandDanceSettingsManager {
+        private _settings: SandDanceSettings;
+
+        public set settings(value: SandDanceSettings) {
+            this._settings = value;
+        }
+
+        public getLabelsColor(): string {
+            return (this._settings && this._settings.labels && this._settings.labels.color) || "#fff";
+        }
+
+        private getChartSettings(): SandDanceChartSettings {
+            return this._settings && this._settings.chart;
+        }
+
+        public getPanelBackgroundColor(): string {
+            return (this.getChartSettings() && this._settings.chart.panelBackgroundColor) || "#000";
+        }
+
+        private getLabelsSettings(): SandDanceLabelsSettings {
+            return this._settings && this._settings.labels;
+        }
+
+        public getBoxBackgroundColor(): string {
+            return (this.getLabelsSettings() && this._settings.labels.boxBackgroundColor) || "#000";
+        }
+
+        public getBoxHoverBackgroundColor(): string {
+            return (this.getLabelsSettings() && this._settings.labels.boxHoverBackgroundColor) || "#333";
+        }
+
+        public getLabelsFontSize(): number {
+            return jsCommon.PixelConverter.fromPointToPixel((this.getLabelsSettings() && this._settings.labels.fontSize) || 8.3);
+        }
+
+        private getToolbarSettings(): SandDanceToolbarSettings {
+            return this._settings && this._settings.toolbar
+        }
+
+        public getToolbarColor(): string {
+            return (this.getToolbarSettings() && this._settings.toolbar.color) || "#6e6f71";
+        }
+
+        public getToolBarActiveColor(): string {
+            return (this.getToolbarSettings() && this._settings.toolbar.activeColor) || "#fff";
+        }
+    }
+
     export interface SandDanceData {
         [columnName: string]: any[];
     }
@@ -69,11 +117,44 @@ module powerbi.visuals.samples {
         margin?: IMargin;
     }
 
+    export interface SandDanceColorSettings {
+        color: string;
+    }
+
+    export interface SandDanceBackgroundColorSettings {
+        backgroundColor?: string;
+    }
+
+    export interface SandDanceChartSettings extends SandDanceBackgroundColorSettings {
+        chartType: string;
+        color: string;
+        panelBackgroundColor: string;
+        fontSize: number;
+    }
+
+    export interface SandDanceCanvasSettings extends SandDanceBackgroundColorSettings {
+        shapeColor: string;
+    }
+
+    export interface SandDanceLabelsSettings extends SandDanceColorSettings {
+        boxBackgroundColor: string;
+        boxHoverBackgroundColor: string;
+        fontSize: number;
+    }
+
+    export interface SandDanceToolbarSettings extends SandDanceBackgroundColorSettings {
+        color: string;
+        activeColor: string;
+    }
+
     export interface SandDanceSettings {
         application: any;
         session: any;
         preloads: any;
-        chartType: string;
+        chart: SandDanceChartSettings;
+        canvas: SandDanceCanvasSettings;
+        labels: SandDanceLabelsSettings;
+        toolbar: SandDanceToolbarSettings;
     }
 
     interface PanelTable {
@@ -91,11 +172,71 @@ module powerbi.visuals.samples {
     export class SandDance implements IVisual {
         private static ClassName: string = "sandDance";
 
+        private static DefaultFontSize: number = 8.3;
+
         private static Properties: SandDanceProperties = {
-            settings: {
+            chart: {
                 chartType: {
-                    objectName: "settings",
+                    objectName: "chart",
                     propertyName: "chartType"
+                },
+                backgroundColor: {
+                    objectName: "chart",
+                    propertyName: "backgroundColor"
+                },
+                color: {
+                    objectName: "chart",
+                    propertyName: "color"
+                },
+                panelBackgroundColor: {
+                    objectName: "chart",
+                    propertyName: "panelBackgroundColor"
+                },
+                fontSize: {
+                    objectName: "chart",
+                    propertyName: "fontSize"
+                }
+            },
+            canvas: {
+                backgroundColor: {
+                    objectName: "canvas",
+                    propertyName: "backgroundColor"
+                },
+                shapeColor: {
+                    objectName: "canvas",
+                    propertyName: "shapeColor"
+                }
+            },
+            labels: {
+                color: {
+                    objectName: "labels",
+                    propertyName: "color"
+                },
+                boxBackgroundColor: {
+                    objectName: "labels",
+                    propertyName: "boxBackgroundColor"
+                },
+                boxHoverBackgroundColor: {
+                    objectName: "labels",
+                    propertyName: "boxHoverBackgroundColor"
+                },
+                fontSize: {
+                    objectName: "labels",
+                    propertyName: "fontSize"
+                }
+            },
+            toolbar: {
+                backgroundColor: {
+                    objectName: "toolbar",
+                    propertyName: "backgroundColor"
+                },
+                color: {
+                    objectName: "toolbar",
+                    propertyName: "color"
+                },
+                activeColor: {
+                    objectName: "toolbar",
+                    propertyName: "activeColor"
                 }
             }
         };
@@ -162,6 +303,34 @@ module powerbi.visuals.samples {
             "drawStats"
         ];
 
+        private static DefaultSettings: SandDanceSettings = {
+            application: {},
+            session: {},
+            preloads: {},
+            chart: {
+                chartType: chartType.types[1],
+                color: "#fff",
+                panelBackgroundColor: "#1C1A18",
+                fontSize: SandDance.DefaultFontSize,
+                backgroundColor: "#000"
+            },
+            canvas: {
+                backgroundColor: "#000",
+                shapeColor: "#0cf"
+            },
+            labels: {
+                color: "#808080",
+                boxBackgroundColor: "#000",
+                boxHoverBackgroundColor: "#333",
+                fontSize: SandDance.DefaultFontSize
+            },
+            toolbar: {
+                backgroundColor: "#1C1A18",
+                color: "#6e6f71",
+                activeColor: "#fff"
+            }
+        };
+
         public static capabilities: VisualCapabilities = {
             dataRoles: [{
                 name: "Values",
@@ -210,12 +379,80 @@ module powerbi.visuals.samples {
                         }
                     }
                 },
-                settings: {
-                    displayName: "Settings",
+                chart: {
+                    displayName: "Chart",
                     properties: {
                         chartType: {
                             displayName: "Chart Type",
                             type: { enumeration: chartType.type }
+                        },
+                        backgroundColor: {
+                            displayName: "Background Color",
+                            type: { fill: { solid: { color: true } } }
+                        },
+                        color: {
+                            displayName: "Color",
+                            type: { fill: { solid: { color: true } } }
+                        },
+                        panelBackgroundColor: {
+                            displayName: "Panel Background Color",
+                            type: { fill: { solid: { color: true } } }
+                        },
+                        fontSize: {
+                            displayName: data.createDisplayNameGetter("Visual_TextSize"),
+                            type: { formatting: { fontSize: true } }
+                        }
+                    }
+                },
+                canvas: {
+                    displayName: "Canvas",
+                    properties: {
+                        backgroundColor: {
+                            displayName: "Background Color",
+                            type: { fill: { solid: { color: true } } }
+                        },
+                        shapeColor: {
+                            displayName: "Shape Color",
+                            type: { fill: { solid: { color: true } } }
+                        }
+                    }
+                },
+                labels: {
+                    displayName: data.createDisplayNameGetter('Visual_DataPointsLabels'),
+                    description: data.createDisplayNameGetter('Visual_DataPointsLabelsDescription'),
+                    properties: {
+                        color: {
+                            displayName: "Color",
+                            type: { fill: { solid: { color: true } } }
+                        },
+                        boxBackgroundColor: {
+                            displayName: "Box Background Color",
+                            type: { fill: { solid: { color: true } } }
+                        },
+                        boxHoverBackgroundColor: {
+                            displayName: "Box Hover Background Color",
+                            type: { fill: { solid: { color: true } } }
+                        },
+                        fontSize: {
+                            displayName: data.createDisplayNameGetter("Visual_TextSize"),
+                            type: { formatting: { fontSize: true } }
+                        }
+                    }
+                },
+                toolbar: {
+                    displayName: "Toolbar",
+                    properties: {
+                        backgroundColor: {
+                            displayName: "Background Color",
+                            type: { fill: { solid : { color: true } } }
+                        },
+                        color: {
+                            displayName: "Color",
+                            type: { fill: { solid : { color: true } } }
+                        },
+                        activeColor: {
+                            displayName: "Active Color",
+                            type: { fill: { solid : { color: true } } }
                         }
                     }
                 }
@@ -234,6 +471,8 @@ module powerbi.visuals.samples {
         private viewport: IViewport;
 
         private host: IVisualHostServices;
+
+        private colors: IDataColorPalette;
 
         private rootElement: D3.Selection;
         private mainElement: D3.Selection;
@@ -261,6 +500,12 @@ module powerbi.visuals.samples {
         public init(visualsOptions: VisualInitOptions): void {
             this.host = visualsOptions.host;
 
+            var style: IVisualStyle = visualsOptions.style;
+
+            this.colors = style && style.colorPalette
+                ? style.colorPalette.dataColors
+                : new DataColorPalette();
+
             this.addElements(visualsOptions.element.get(0));
 
             this.setSize(visualsOptions.viewport);
@@ -269,6 +514,7 @@ module powerbi.visuals.samples {
 
             this.objectCache = new sandDance.ObjectCache();
 
+            this.objectCache.set("settingsManager", new SandDanceSettingsManager());
             this.objectCache.set("hostBus", new sandDance.Bus("hostBus"));
             this.objectCache.set("iframeBus", new sandDance.Bus("iframeBus"));
 
@@ -609,9 +855,11 @@ module powerbi.visuals.samples {
 
         private changeChartType(chartType: string): void {
             this.host.persistProperties(<VisualObjectInstancesToPersist> {
+                replace: [],
+                remove: [],
                 merge: [{
-                    objectName: "settings",
-                    displayName: "settings",
+                    objectName: "chart",
+                    displayName: "chart",
                     selector: null,
                     properties: {
                         chartType: chartType
@@ -623,7 +871,7 @@ module powerbi.visuals.samples {
         public update(visualUpdateOptions: VisualUpdateOptions): void {
             if (!visualUpdateOptions ||
                 !visualUpdateOptions.dataViews ||
-                !visualUpdateOptions.dataViews[0]){
+                !visualUpdateOptions.dataViews[0]) {
                 return;
             }
 
@@ -631,6 +879,10 @@ module powerbi.visuals.samples {
 
             this.setSize(visualUpdateOptions.viewport);
             this.updateElements();
+
+            (<SandDanceSettingsManager> this.objectCache.get("settingsManager")).settings = dataView.settings;
+
+            this.updateStyles(dataView.settings);
 
             this.application.update(this.viewport.width, this.viewport.height);
 
@@ -643,7 +895,7 @@ module powerbi.visuals.samples {
             }
 
             if (this.dataView) {
-                this.application.changeChartType(dataView.settings.chartType);
+                this.application.changeChartType(dataView.settings.chart.chartType);
             }
 
             if (!this.dataView) {
@@ -654,6 +906,38 @@ module powerbi.visuals.samples {
             }
 
             this.dataView = dataView;
+        }
+
+        private updateStyles(settings: SandDanceSettings): void {
+            this.rootElement.style({
+                "background-color": settings.chart.backgroundColor,
+                "color": settings.chart.color,
+                "font-size": `${jsCommon.PixelConverter.fromPointToPixel(settings.chart.fontSize)}px`
+            });
+
+            let bigBarSelection: D3.Selection = this.rootElement.selectAll(".bigBar");
+
+            bigBarSelection.style({
+                "background-color": settings.toolbar.backgroundColor,
+                "color": settings.toolbar.color
+            });
+
+            bigBarSelection.selectAll(".activeValue").style({
+                color: settings.toolbar.activeColor
+            });
+
+            bigBarSelection.selectAll(".noneValue").style({
+                color: settings.toolbar.color
+            });
+
+            this.rootElement.selectAll(".popupMenu").style("background-color", settings.chart.panelBackgroundColor);
+            this.rootElement.selectAll(".popupPanel").style("background-color", settings.chart.panelBackgroundColor);
+            this.rootElement.selectAll(".panel").style("background-color", settings.chart.panelBackgroundColor);
+
+            this.application.changeCanvasColor(settings.canvas.backgroundColor);
+            this.application.setShapeColor(settings.canvas.shapeColor);
+
+            this.rootElement.selectAll(".svgDoc").style("font-size", `${jsCommon.PixelConverter.fromPointToPixel(settings.labels.fontSize)}px`);
         }
 
         public converter(dataView: DataView): SandDanceDataView {
@@ -702,15 +986,14 @@ module powerbi.visuals.samples {
             if (!dataView ||
                 !dataView.metadata ||
                 !dataView.metadata.objects) {
-                return {
-                    application: {},
-                    session: {},
-                    preloads: {},
-                    chartType: chartType[1]
-                };
+                return SandDance.DefaultSettings;
             }
 
-            let settings: SandDanceSettings = <SandDanceSettings> {},
+            let settings: SandDanceSettings = <SandDanceSettings> {
+                    chart: {},
+                    canvas: {},
+                    labels: {}
+                },
                 objects: DataViewObjects = dataView.metadata.objects,
                 settingsNames: string[] = [
                     "application",
@@ -730,12 +1013,70 @@ module powerbi.visuals.samples {
                 settings[settingsName] = currentSettings;
             });
 
-            settings.chartType = DataViewObjects.getValue<string>(
-                objects,
-                SandDance.Properties["settings"]["chartType"],
-                chartType.types[1]);
+            settings.chart = this.parseChartSettings(objects);
+            settings.canvas = this.parseCanvasSettings(objects);
+            settings.labels = this.parseLabelsSettings(objects);
+            settings.toolbar = this.parseToolbarSettings(objects);
 
             return settings;
+        }
+
+        private parseChartSettings(objects: DataViewObjects): SandDanceChartSettings {
+            let chartSettings: SandDanceChartSettings = <SandDanceChartSettings> {},
+                defaultChartSettings: SandDanceChartSettings = SandDance.DefaultSettings.chart;
+
+            chartSettings.chartType = DataViewObjects.getValue<string>(
+                objects,
+                SandDance.Properties["chart"]["chartType"],
+                chartType.types[1]);
+
+            chartSettings.backgroundColor = this.getColor(SandDance.Properties["chart"]["backgroundColor"], defaultChartSettings.backgroundColor, objects);
+            chartSettings.color = this.getColor(SandDance.Properties["chart"]["color"], defaultChartSettings.color, objects);
+            chartSettings.panelBackgroundColor = this.getColor(SandDance.Properties["chart"]["panelBackgroundColor"], defaultChartSettings.panelBackgroundColor, objects);
+            chartSettings.fontSize = DataViewObjects.getValue(objects, SandDance.Properties["chart"]["fontSize"], defaultChartSettings.fontSize);
+
+            return chartSettings;
+        }
+
+        private parseCanvasSettings(objects: DataViewObjects): SandDanceCanvasSettings {
+            let canvasSettings: SandDanceCanvasSettings = <SandDanceCanvasSettings> {},
+                defaultCanvasSettings: SandDanceCanvasSettings = SandDance.DefaultSettings.canvas;
+
+            canvasSettings.backgroundColor = this.getColor(SandDance.Properties["canvas"]["backgroundColor"], defaultCanvasSettings.backgroundColor, objects);
+            canvasSettings.shapeColor = this.getColor(SandDance.Properties["canvas"]["shapeColor"], defaultCanvasSettings.shapeColor, objects);
+
+            return canvasSettings;
+        }
+
+        private parseLabelsSettings(objects: DataViewObjects): SandDanceLabelsSettings {
+            let labelsSettings: SandDanceLabelsSettings = <SandDanceLabelsSettings> {},
+                defaultLabelsSettings: SandDanceLabelsSettings = SandDance.DefaultSettings.labels;
+
+            labelsSettings.color = this.getColor(SandDance.Properties["labels"]["color"], defaultLabelsSettings.color, objects);
+            labelsSettings.boxBackgroundColor = this.getColor(SandDance.Properties["labels"]["boxBackgroundColor"], defaultLabelsSettings.boxBackgroundColor, objects);
+            labelsSettings.boxHoverBackgroundColor = this.getColor(SandDance.Properties["labels"]["boxHoverBackgroundColor"], defaultLabelsSettings.boxHoverBackgroundColor, objects);
+            labelsSettings.fontSize = DataViewObjects.getValue<number>(objects, SandDance.Properties["labels"]["fontSize"], defaultLabelsSettings.fontSize);
+
+            return labelsSettings;
+        }
+
+        private parseToolbarSettings(objects: DataViewObjects): SandDanceToolbarSettings {
+            let toolbarSettings: SandDanceToolbarSettings = <SandDanceToolbarSettings> {},
+                defaultToolbarSettings: SandDanceToolbarSettings = SandDance.DefaultSettings.toolbar;
+
+            toolbarSettings.backgroundColor = this.getColor(SandDance.Properties["toolbar"]["backgroundColor"], defaultToolbarSettings.backgroundColor, objects);
+            toolbarSettings.color = this.getColor(SandDance.Properties["toolbar"]["color"], defaultToolbarSettings.color, objects);
+            toolbarSettings.activeColor = this.getColor(SandDance.Properties["toolbar"]["activeColor"], defaultToolbarSettings.activeColor, objects);
+
+            return toolbarSettings;
+        }
+
+        private getColor(properties: DataViewObjectPropertyIdentifier, defaultColor: string, objects: DataViewObjects): string {
+            let colorHelper: ColorHelper;
+
+            colorHelper = new ColorHelper(this.colors, properties, defaultColor);
+
+            return colorHelper.getColorForMeasure(objects, "");
         }
 
         private setSize(viewport: IViewport): void {
@@ -774,25 +1115,82 @@ module powerbi.visuals.samples {
         }
 
         public enumerateObjectInstances(options: EnumerateVisualObjectInstancesOptions): VisualObjectInstanceEnumeration  {
-            let enumeration = new ObjectEnumerationBuilder();
+            let enumeration: ObjectEnumerationBuilder = new ObjectEnumerationBuilder();
 
             switch (options.objectName) {
-                case "settings": {
-                    let settings: VisualObjectInstance = {
-                        objectName: "settings",
-                        displayName: "settings",
-                        selector: null,
-                        properties: {
-                            chartType: this.dataView.settings.chartType
-                        }
-                    };
-
-                    enumeration.pushInstance(settings);
+                case "chart": {
+                    this.enumerateChart(enumeration);
+                    break;
+                }
+                case "canvas": {
+                    this.enumerateCanvas(enumeration);
+                    break;
+                }
+                case "labels": {
+                    this.enumerateLabels(enumeration);
+                    break;
+                }
+                case "toolbar": {
+                    this.enumerateToolbar(enumeration);
                     break;
                 }
             }
 
             return enumeration.complete();
+        }
+
+        private enumerateChart(enumeration: ObjectEnumerationBuilder): void {
+            enumeration.pushInstance({
+                objectName: "chart",
+                displayName: "chart",
+                selector: null,
+                properties: {
+                    chartType: this.dataView.settings.chart.chartType,
+                    backgroundColor: this.dataView.settings.chart.backgroundColor,
+                    color: this.dataView.settings.chart.color,
+                    panelBackgroundColor: this.dataView.settings.chart.panelBackgroundColor,
+                    fontSize: this.dataView.settings.chart.fontSize
+                }
+            });
+        }
+
+        private enumerateCanvas(enumeration: ObjectEnumerationBuilder): void {
+            enumeration.pushInstance({
+                objectName: "canvas",
+                displayName: "canvas",
+                selector: null,
+                properties: {
+                    backgroundColor: this.dataView.settings.canvas.backgroundColor,
+                    shapeColor: this.dataView.settings.canvas.shapeColor
+                }
+            });
+        }
+
+        private enumerateLabels(enumeration: ObjectEnumerationBuilder): void {
+            enumeration.pushInstance({
+                objectName: "labels",
+                displayName: "labels",
+                selector: null,
+                properties: {
+                    color: this.dataView.settings.labels.color,
+                    boxBackgroundColor: this.dataView.settings.labels.boxBackgroundColor,
+                    boxHoverBackgroundColor: this.dataView.settings.labels.boxHoverBackgroundColor,
+                    fontSize: this.dataView.settings.labels.fontSize
+                }
+            });
+        }
+
+        private enumerateToolbar(enumeration: ObjectEnumerationBuilder): void {
+            enumeration.pushInstance({
+                objectName: "toolbar",
+                displayName: "toolbar",
+                selector: null,
+                properties: {
+                    backgroundColor: this.dataView.settings.toolbar.backgroundColor,
+                    color: this.dataView.settings.toolbar.color,
+                    activeColor: this.dataView.settings.toolbar.activeColor
+                }
+            });
         }
 
         public destroy(): void {

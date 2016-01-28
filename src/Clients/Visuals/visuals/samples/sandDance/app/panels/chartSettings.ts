@@ -13,7 +13,7 @@ module sandDance {
                     rows: [
                         { prompt: "Shapes:", tip: "Change shape settings" },
                         { col: 1, numAdjuster: "Shape size:", tip: "Adjust the size factor applied to all shapes", min: 0, max: 3, dataName: "sizeFactor", newCol: true },
-                        { col: 1, colorPicker: "Shape color:", tip: "Sets the shape color (used when color is not mapped to a column) ", dataName: "shapeColor" },
+                        // { col: 1, colorPicker: "Shape color:", tip: "Sets the shape color (used when color is not mapped to a column) ", dataName: "shapeColor" },
                         { col: 1, shapePicker: "Shape image:", tip: "Sets the image used to draw shapes", dataName: "shapeImage" },
 
                         { prompt: "Layouts:", tip: "Change layout settings" },

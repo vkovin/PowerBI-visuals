@@ -80,7 +80,7 @@ module sandDance {
                     tabName: "Chart", tip: "Settings for drawing the chart and its shapes", rows:
                     [
                         { col: 1, numAdjuster: "Shape opacity:", tip: "Sets the opacity of all shapes", min: 0, max: 1, dataName: "shapeOpacity", newCol: true },
-                        { col: 1, colorPicker: "Canvas:", tip: "Sets the background color", dataName: "canvasColor" },
+                        // { col: 1, colorPicker: "Canvas:", tip: "Sets the background color", dataName: "canvasColor" },
                         { col: 1, numAdjuster: "Frame opacity:", tip: "Sets the chart frame opacity", min: 0, max: 1, dataName: "chartFrameOpacity", newCol: true },
 
                         { prompt: "Advanced:", tip: "Advanced shape properties" },
@@ -100,8 +100,8 @@ module sandDance {
                         { prompt: "Column picker:", tip: "Change options for the column picker control" },
                         { col: 1, checkbox: "Sort columns", tip: "Sort the columns in the column picker", dataName: "isColPickerSorted" },
 
-                        { prompt: "Panels:", tip: "Parameters for panels" },
-                        { col: 1, numAdjuster: "Panel opacity:", tip: "The opacity of panels", min: .4, max: 1, dataName: "panelOpacity", newCol: true },
+                        // { prompt: "Panels:", tip: "Parameters for panels" },
+                        // { col: 1, numAdjuster: "Panel opacity:", tip: "The opacity of panels", min: .4, max: 1, dataName: "panelOpacity", newCol: true },
                     ]
                 },
 
@@ -115,7 +115,7 @@ module sandDance {
                         { prompt: "Mapping:", tip: "Options for attribute mapping (Color, Size, Facets, X-Bins, Y-Bins)" },
                         { col: 1, checkbox: "Nice numbers", tip: "Adjust min/max/increment to use nice numbers", dataName: "useNiceNumbers" },
 
-                        { col: 1, numAdjuster: "Default bins:", tip: "Set the default number of bins", min: 1, max: 99, roundValues: true, dataName: "defaultBins" },
+                        // { col: 1, numAdjuster: "Default bins:", tip: "Set the default number of bins", min: 1, max: 99, roundValues: true, dataName: "defaultBins" },
 
                     ]
                 },

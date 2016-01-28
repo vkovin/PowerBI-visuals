@@ -364,9 +364,17 @@ module beachParty
                                     element.addEventListener("click", (e) => this.doSearch(e, "Y"));
 
                                     elementItem
-                                        .style("cursor", "pointer")
+                                        .style({
+                                            "cursor": "pointer",
+                                            "fill": this.appMgr.getSettingsManager().getLabelsColor()
+                                        })
                                         .attr("simpleHighlight", "true")
                                         .classed("clickableAxisLabel", true);
+
+                                    // elementItem
+                                    //     .style("cursor", "pointer")
+                                    //     .attr("simpleHighlight", "true")
+                                    //     .classed("clickableAxisLabel", true);
 
                                     yLast = utils.prepElementForSearch(element, yCol, scales.y, yBinResults, index, yLast, yIsCat, record,
                                         "label");
@@ -394,6 +402,13 @@ module beachParty
                                     element.addEventListener("click", (e) => this.doSearch(e, "Y"));
 
                                     elementItem
+                                        .style("fill", this.appMgr.getSettingsManager().getBoxBackgroundColor())
+                                        .on("mouseover", () => {
+                                            elementItem.style("fill", this.appMgr.getSettingsManager().getBoxHoverBackgroundColor());
+                                        })
+                                        .on("mouseout", () => {
+                                            elementItem.style("fill", this.appMgr.getSettingsManager().getBoxBackgroundColor());
+                                        })
                                         .append("title")
                                         .text(tickBarTooltip);
 
@@ -439,7 +454,10 @@ module beachParty
                                     element.addEventListener("click", (e) => this.doSearch(e, "X"));
 
                                     elementItem
-                                        .style("cursor", "pointer")
+                                        .style({
+                                            "cursor": "pointer",
+                                            "fill": this.appMgr.getSettingsManager().getLabelsColor()
+                                        })
                                         .attr("simpleHighlight", "true")
                                         .classed("clickableAxisLabel", true);
 
@@ -469,6 +487,13 @@ module beachParty
                                     element.addEventListener("click", (e) => this.doSearch(e, "X"));
 
                                     elementItem
+                                        .style("fill", this.appMgr.getSettingsManager().getBoxBackgroundColor())
+                                        .on("mouseover", () => {
+                                            elementItem.style("fill", this.appMgr.getSettingsManager().getBoxHoverBackgroundColor());
+                                        })
+                                        .on("mouseout", () => {
+                                            elementItem.style("fill", this.appMgr.getSettingsManager().getBoxBackgroundColor());
+                                        })
                                         .append("title")
                                         .text(tickBarTooltip);
 

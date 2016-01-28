@@ -85,7 +85,7 @@ module beachPartyApp
             this._isSavingSettingsDisabled = true;
 
             //---- CHART tab ----
-            this.shapeColor("beach blue");
+            this.shapeColor("#0cf");
             this.shapeImage("none");
             this.canvasColor("black");
             this.drawingPrimitive("auto");
@@ -146,7 +146,7 @@ module beachPartyApp
             this._isSavingSettingsDisabled = false;
         }
 
-        saveAppSettings()//TODO: save settings in PowerBI.
+        saveAppSettings()
         {
             if (!this._isSavingSettingsDisabled && !this._persistChangesDisabledFromUrlParams)
             {

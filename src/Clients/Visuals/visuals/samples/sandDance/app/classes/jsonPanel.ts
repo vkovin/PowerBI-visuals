@@ -948,7 +948,7 @@ module beachPartyApp
 
             var initValue = this.getValue(row.dataName);
 
-            var numAdjuster = new NumAdjusterClass(this.container, parentId, "", initValue, row.min, row.max, row.tip,
+            var numAdjuster = new NumAdjusterClass(this.application, this.container, parentId, "", initValue, row.min, row.max, row.tip,
                 AdjusterStyle.bottomInPanel, row.roundValues, row.syncChanges, row.spreadLow);
 
             numAdjuster.show(true);

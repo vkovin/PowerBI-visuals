@@ -10,6 +10,7 @@ module beachPartyApp
     export class NumAdjusterClass extends beachParty.DataChangerClass
     {
         private container: HTMLElement;
+        private application: AppClass;
 
         _root: HTMLElement;
         _nameText: HTMLElement;
@@ -46,11 +47,12 @@ module beachPartyApp
 
         /** if "syncChanges" is true, a dataChanged event on "value" is issued whenever the numAdjuster value is changed.  if false,
         event is only triggered on mouse up. */
-        constructor(container: HTMLElement, rootName: string, name: string, initialValue: number, minValue: number, maxValue: number, tooltip: string, style: AdjusterStyle,
+        constructor(application: AppClass, container: HTMLElement, rootName: string, name: string, initialValue: number, minValue: number, maxValue: number, tooltip: string, style: AdjusterStyle,
             roundValues?: boolean, syncChanges?: boolean, spreadLow?: boolean)
         {
             super();
 
+            this.application = application;
             this.container = container;
 
             this._value = initialValue;

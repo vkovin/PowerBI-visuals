@@ -25,7 +25,8 @@ module beachPartyApp
             var rootW = vp.select(document.createElement("div"))
                 .addClass(id)
                 // .css("position", "absolute")
-                .addClass("popupMenu");
+                .addClass("popupMenu")
+                .css("background-color", application.getSettingsManager().getPanelBackgroundColor());
 
             //---- holder of menu items ----
             var holderW = rootW.append("div")

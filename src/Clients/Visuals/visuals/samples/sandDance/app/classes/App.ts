@@ -26,9 +26,6 @@ module beachPartyApp
 
         public data: any;
 
-        private previousWidth: number;
-        private previousHeight: number;
-
         public width: number;
         public height: number;
 
@@ -218,6 +215,10 @@ module beachPartyApp
 
         public set coreApplication(app: beachParty.AppMgrClass) {
             this.coreApplicationInstance = app;
+        }
+
+        public getSettingsManager(): powerbi.visuals.samples.SandDanceSettingsManager {
+            return <powerbi.visuals.samples.SandDanceSettingsManager> this.objectCache.get("settingsManager");
         }
 
         run()
@@ -924,7 +925,7 @@ module beachPartyApp
 
             // this.createIconTextPair(trW, "onAddView", "addView", "Open a new SandDance browser tab/window", "fnIconBarNewView", "View", false);
 
-            this.createIconTextPair(trW, "onOpenScrubber", "scrub", "Open the data scrubber dialog", "fnIconBarScrubber", "Scrub", false);
+            // this.createIconTextPair(trW, "onOpenScrubber", "scrub", "Open the data scrubber dialog", "fnIconBarScrubber", "Scrub", false);
             this.createSpacer(trW);
 
             this.createIconTextPair(trW, "onIsolateClick", "isolate", "Isolate the selected items", "fnIconBarIsolate", "Isolate");
@@ -934,13 +935,6 @@ module beachPartyApp
 
             this.createIconTextPair(trW, "onSlicerClick", "dataSlicer", "Open the data slicer panel", "fnIconBarSlicer", "Slicer", false, true);
             this.createIconTextPair(trW, "onDetailsClick", "details", "Show details of the selected items", "fnIconBarDetails", "Details", false, true);
-
-            if (sandDance.commonUtils.isFullscreenEnabled()) {
-                this.createSpacer(trW);
-                this.createIconTextPair(trW, "onFullscreenClick", "fullscreenButton", "Fullscreen", "fullscreenWhite", "Fullscreen", false, true);
-
-                this.addFullscreenEvents();
-            }
 
             // Snapshot doesn't work because we don't have support in current browsers. It supports only IE.
             // this.createIconTextPair(trW, "onSnapshotClick", "snapshot", "Download snapshot of page", "fnIconBarSnapshot", "Snapshot");
@@ -2134,6 +2128,12 @@ module beachPartyApp
             //this._isLoggingEnabled = true;
         }
 
+        public setShapeColor(color: string): void {
+            if (this.settings.shapeColor() !== color) {
+                this.settings.shapeColor(color);
+            }
+        }
+
         onOpenScrubber(e)
         {
             //---- only open if not already open ----
@@ -2152,59 +2152,6 @@ module beachPartyApp
                     this._scrubberDialog = null;
                 });
             }
-        }
-
-        private addFullscreenEvents(): void {
-            document.addEventListener("fullscreenchange", () => {
-                console.warn("fullscreenchange");
-                
-                this.updateFullscreen();
-            });
-
-            document.addEventListener("webkitfullscreenchange", () => {
-                console.warn("webkitfullscreenchange");
-                this.updateFullscreen();
-            });
-
-            document.addEventListener("mozfullscreenchange", () => {
-                console.warn("mozfullscreenchange");
-                this.updateFullscreen();
-            });
-
-            document.addEventListener("MSFullscreenChange", () => {
-                console.warn("MSFullscreenChange");
-                this.updateFullscreen();
-            });
-        }
-
-        onFullscreenClick(e): void {
-            sandDance.commonUtils.toggleFullScreen(this.container);
-        }
-
-        private updateFullscreen(): void {
-            let isFullscreenActive: boolean = 
-                sandDance.commonUtils.isFullscreenActive() &&
-                sandDance.commonUtils.getFullscreenElement() === this.container;
-
-            if (isFullscreenActive) {
-                this.previousWidth = this.width;
-                this.previousHeight = this.height;
-
-                this.update(window.screen.width, window.screen.height);
-
-                this.isFullscreen = true;
-            } else {
-                this.isFullscreen = false;
-
-                this.update(this.previousWidth, this.previousHeight);
-            }
-
-            AppUtils.setButtonSelectedState(
-                this.container,
-                "fullscreenButton",
-                isFullscreenActive,
-                "fullscreenWhite",
-                "fullscreenBlack");
         }
 
         closeScrubberDialog()
@@ -2900,6 +2847,10 @@ module beachPartyApp
             }
 
             this.logAction(Gesture.click, e.target.id, ElementType.button, action, Target.threeDimWheel, true);
+        }
+
+        public changeCanvasColor(color: string): void {
+            this.settings.canvasColor(color);
         }
 
         showRing()
@@ -3865,7 +3816,7 @@ module beachPartyApp
         buildBinAdjusters()
         {
             //---- FACET bins ----
-            this._facetBinAdjuster = new NumAdjusterClass(this.container, "facetBins", "Bins", this.facetBins(), 1, 99, "The number of facet bins to create.  Drag in circle to change.",
+            this._facetBinAdjuster = new NumAdjusterClass(this, this.container, "facetBins", "Bins", this.facetBins(), 1, 99, "The number of facet bins to create.  Drag in circle to change.",
                 AdjusterStyle.right, true, false, true);
 
             beachParty.connectModelView(this, "facetBins", this._facetBinAdjuster, "value");
@@ -3886,7 +3837,7 @@ module beachPartyApp
             //});
 
             //---- OPACITY adjuster ----
-            this._opacityAdjuster = new NumAdjusterClass(this.container, "opacityAdj", "Opacity", this.settings._shapeOpacity, 0, 1, "Adjust the opacity of the shapes.  Drag in circle to change.",
+            this._opacityAdjuster = new NumAdjusterClass(this, this.container, "opacityAdj", "Opacity", this.settings._shapeOpacity, 0, 1, "Adjust the opacity of the shapes.  Drag in circle to change.",
                 AdjusterStyle.right, false, true);
 
             beachParty.connectModelView(this.settings, "shapeOpacity", this._opacityAdjuster, "value");
@@ -3905,19 +3856,19 @@ module beachPartyApp
             //beachParty.connectModelView(this, "textOpacity", this._textOpacityAdjuster, "value");
 
             //---- X bins ----
-            this._xBinAdjuster = new NumAdjusterClass(this.container, "xBins", "Bins", this.xBins(), 1, 999, "The number of X-axis bins to create.  Drag in circle to change.",
+            this._xBinAdjuster = new NumAdjusterClass(this, this.container, "xBins", "Bins", this.xBins(), 1, 999, "The number of X-axis bins to create.  Drag in circle to change.",
                 AdjusterStyle.bottom, true, false, true);
 
             beachParty.connectModelView(this, "xBins", this._xBinAdjuster, "value");
 
             //---- Y bins ----
-            this._yBinAdjuster = new NumAdjusterClass(this.container, "yBins", "Bins", this.yBins(), 1, 999, "The number of Y-axis bins to create.  Drag in circle to change.",
+            this._yBinAdjuster = new NumAdjusterClass(this, this.container, "yBins", "Bins", this.yBins(), 1, 999, "The number of Y-axis bins to create.  Drag in circle to change.",
                 AdjusterStyle.left, true, false, true);
 
             beachParty.connectModelView(this, "yBins", this._yBinAdjuster, "value");
 
             //---- Z bins ----
-            this._zBinAdjuster = new NumAdjusterClass(this.container, "zBins", "Bins", this.zBins(), 1, 10,
+            this._zBinAdjuster = new NumAdjusterClass(this, this.container, "zBins", "Bins", this.zBins(), 1, 10,
                 "The number of z bins to create.  Drag in circle to change.", AdjusterStyle.left, true, false, false);
 
             beachParty.connectModelView(this, "zBins", this._zBinAdjuster, "value");
@@ -5637,16 +5588,21 @@ module beachPartyApp
             var buttonW = vp.select(this.container, ".bb" + baseName);
             if (buttonW[0])
             {
-                var valueW = vp.select(this.container, ".bb" + baseName + "Value");
+                var valueW = vp.select(this.container, ".bb" + baseName + "Value"),
+                    settingsManager = this.getSettingsManager();
 
                 if (!value)
                 {
                     valueW.addClass("noneValue");
+                    valueW.removeClass("activeValue")
+                    valueW.css("color", settingsManager.getToolbarColor());
                     valueW.text("None");
                 }
                 else
                 {
                     valueW.removeClass("noneValue");
+                    valueW.addClass("activeValue");
+                    valueW.css("color", settingsManager.getToolBarActiveColor());
                     valueW.text(value);
                 }
 

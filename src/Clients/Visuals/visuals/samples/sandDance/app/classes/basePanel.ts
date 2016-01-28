@@ -46,8 +46,11 @@ module beachPartyApp
             // var maxWidth = AppClass.maxPanelWidth;
 
             var rootW = vp.select(container).append("div")
-                .addClass(name + "Panel");
+                .addClass(name + "Panel")
+                .css("background-color", application.getSettingsManager().getPanelBackgroundColor());
                 //.css("overflow-y", "auto")          // make each panel do more intelligent sizing of contained lists
+
+            rootW.css("background-color", application.getSettingsManager().getPanelBackgroundColor());
 
             rootW.element()
                 .addEventListener("focus", (e) => 
