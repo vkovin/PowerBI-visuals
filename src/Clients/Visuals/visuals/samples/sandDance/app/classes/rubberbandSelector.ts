@@ -86,7 +86,6 @@ module beachPartyApp
             return (this._isBanding && this._isEnabled);
         }
 
-    
         hookEvents(canvasChanged: boolean)
         {
             //---- always process mouse up, so we can track right mouse button up/down state ----

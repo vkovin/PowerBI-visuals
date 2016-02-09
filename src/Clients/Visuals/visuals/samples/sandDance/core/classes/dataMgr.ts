@@ -924,7 +924,7 @@ module beachParty
         onSelectionChanged(changeSource = "local")
         {
             this.computeSelectedCount();
-            this.onDataChanged("selection");
+            this.onDataChanged("selection", undefined, changeSource);
 
             var select = this.getSelectedVector(false);
 

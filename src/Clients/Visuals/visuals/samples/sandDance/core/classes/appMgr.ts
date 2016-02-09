@@ -323,7 +323,8 @@ module beachParty
                 }
             });
 
-            dataMgr.registerForChange("selection", (e) =>
+            // Selection Handler.
+            dataMgr.registerForChange("selection", (e, dataMgr: DataMgrClass, changeSource: string) =>
             {
                 var key = "selectionChanged";
                 var options = subscriptions[key];
@@ -340,7 +341,13 @@ module beachParty
                         selectedRecords = dataMgr.getSelectedRecords(true);
                     }
 
-                    this.postMessageToParent({ msg: key, selectedCount: selectedCount, recordCount: recordCount, selectedRecords: selectedRecords });
+                    this.postMessageToParent({
+                        msg: key,
+                        selectedCount: selectedCount,
+                        recordCount: recordCount,
+                        selectedRecords: selectedRecords,
+                        changeSource: changeSource
+                    });
                 }
             });
 

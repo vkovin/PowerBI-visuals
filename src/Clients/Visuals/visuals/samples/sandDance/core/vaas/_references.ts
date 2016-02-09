@@ -7,6 +7,7 @@
 /// <reference path="../../../../../../Typedefs/jquery/jquery.d.ts" />
 /// <reference path="../../../../../../Typedefs/d3/d3.d.ts" />
 
+/// <reference path="selectionData.ts" />
 /// <reference path="Bus.ts" />
 /// <reference path="settingsType.ts" />
 /// <reference path="utils.ts" />

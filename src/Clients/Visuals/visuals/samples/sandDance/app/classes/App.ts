@@ -34,6 +34,7 @@ module beachPartyApp
         private saveSettingsHandler: (settings: any, type: sandDance.SettingsType)  => void;
         private loadSettingsHandler: (type: sandDance.SettingsType) => any;
         private onChangeChartType: (chartType: string) => void;
+        private onSelectionHandler: (settings: sandDance.SelectionData) => void;
 
         private container: HTMLElement;
 
@@ -182,6 +183,7 @@ module beachPartyApp
             saveSettingsHandler: (settings: any, type: sandDance.SettingsType) => void,
             loadSettingsHandler: (type: sandDance.SettingsType) => any,
             onChangeChartType: (chartType: string) => void,
+            onSelectionHandler: (settings: sandDance.SelectionData) => void,
             container: HTMLElement)
         {
             super();
@@ -190,6 +192,7 @@ module beachPartyApp
             this.loadSettingsHandler = loadSettingsHandler;
 
             this.onChangeChartType = onChangeChartType;
+            this.onSelectionHandler = onSelectionHandler;
 
             this.container = container;
             this.objectCache = objectCache;
@@ -460,6 +463,8 @@ module beachPartyApp
 
                 this.selectedRecords(msgBlock.selectedRecords);
 
+                console.warn("changeSource: ", msgBlock.changeSource);
+
                 // if (vp.utils.isIE)
                 // {
                 //     //---- bug workaround - force storage event trigger for IE from OUTER HTML (not IFRAME) ----
@@ -472,6 +477,18 @@ module beachPartyApp
                 }
 
                 this.updateSelectionButton("Select", this._selectionDesc);
+
+                if (msgBlock.changeSource !== "external") {
+                    setTimeout(() => {
+                        if (this.onSelectionHandler) {
+                            this.onSelectionHandler({
+                                recordCount: msgBlock.recordCount,
+                                selectedCount: msgBlock.selectedCount,
+                                selectedRecords: msgBlock.selectedRecords
+                            });
+                        }
+                    }, 10);
+                }
             });
 
             this._bpsHelper.subscribe("filteredChanged", true, (msgBlock) =>
@@ -566,7 +583,7 @@ module beachPartyApp
         }
 
         public setSelection(vector: any[]): void {
-            this._bpsHelper.setSelection(vector, bps.VectorType.primaryKeyList);
+            this._bpsHelper.setSelection(vector, bps.VectorType.primaryKeyList, "external");
         }
 
         public update(width: number, height: number): void {

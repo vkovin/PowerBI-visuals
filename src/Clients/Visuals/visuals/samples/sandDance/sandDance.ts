@@ -30,7 +30,12 @@
 //--------- SandDance End.
 
 module powerbi.visuals.samples {
+    import Selector = data.Selector;
+    import SelectionManager = utility.SelectionManager;
+    import SemanticFilter = data.SemanticFilter;
     import ClassAndSelector = jsCommon.CssConstants.ClassAndSelector;
+    import DataViewObjectPropertyDescriptors = data.DataViewObjectPropertyDescriptors;
+    import DataViewObjectPropertyDescriptor = data.DataViewObjectPropertyDescriptor;
     import createClassAndSelector = jsCommon.CssConstants.createClassAndSelector;
 
     module chartType {
@@ -104,6 +109,7 @@ module powerbi.visuals.samples {
     }
 
     export interface SandDanceData {
+        __selectionIndexes: number[];
         [columnName: string]: any[];
     }
 
@@ -111,6 +117,7 @@ module powerbi.visuals.samples {
         settings: SandDanceSettings;
         data: SandDanceData;
         highlights: any[];
+        selectionIds: SelectionId[];
     }
 
     export interface SandDanceConstructorOptions {
@@ -130,6 +137,7 @@ module powerbi.visuals.samples {
         color: string;
         panelBackgroundColor: string;
         fontSize: number;
+        selectionNumber: number;
     }
 
     export interface SandDanceCanvasSettings extends SandDanceBackgroundColorSettings {
@@ -175,6 +183,12 @@ module powerbi.visuals.samples {
         private static DefaultFontSize: number = 8.3;
 
         private static Properties: SandDanceProperties = {
+            general: {
+                filter: {
+                    objectName: "general",
+                    propertyName: "filter"
+                }
+            },
             chart: {
                 chartType: {
                     objectName: "chart",
@@ -195,6 +209,10 @@ module powerbi.visuals.samples {
                 fontSize: {
                     objectName: "chart",
                     propertyName: "fontSize"
+                },
+                selectionNumber: {
+                    objectName: "chart",
+                    propertyName: "selectionNumber"
                 }
             },
             canvas: {
@@ -312,7 +330,8 @@ module powerbi.visuals.samples {
                 color: "#fff",
                 panelBackgroundColor: "#1C1A18",
                 fontSize: SandDance.DefaultFontSize,
-                backgroundColor: "#000"
+                backgroundColor: "#000",
+                selectionNumber: 250
             },
             canvas: {
                 backgroundColor: "#000",
@@ -339,7 +358,7 @@ module powerbi.visuals.samples {
             dataViewMappings: [{
                 table: {
                     rows: {
-                        for: { in: 'Values' },
+                        for: { in: "Values" },
                         dataReductionAlgorithm: { window: { count: 50000 } }
                     },
                     rowCount: { preferred: { min: 1 } }
@@ -349,7 +368,19 @@ module powerbi.visuals.samples {
                 general: {
                     displayName: data.createDisplayNameGetter("Visual_General"),
                     properties: {
-                        formatString: { type: { formatting: { formatString: true } } }
+                        formatString: { type: { formatting: { formatString: true } } },
+                        selected: {
+                             type: { bool: true }
+                        },
+                        filter: {
+                            type: { filter: {} },
+                            rule: {
+                                output: {
+                                    property: "selected",
+                                    selector: ["Values"],
+                                }
+                            }
+                        }
                     }
                 },
                 application: {
@@ -401,6 +432,10 @@ module powerbi.visuals.samples {
                         fontSize: {
                             displayName: data.createDisplayNameGetter("Visual_TextSize"),
                             type: { formatting: { fontSize: true } }
+                        },
+                        selectionNumber: {
+                            displayName: "Selection number",
+                            type: { numeric: true }
                         }
                     }
                 },
@@ -458,7 +493,8 @@ module powerbi.visuals.samples {
                 }
             },
             supportsHighlight: true,
-            suppressDefaultTitle: true
+            suppressDefaultTitle: true,
+            supportsSelection: true
         };
 
         private margin: IMargin = {
@@ -489,6 +525,8 @@ module powerbi.visuals.samples {
 
         private dataView: SandDanceDataView;
 
+        private selectionManager: SelectionManager;
+
         private objectCache: sandDance.ObjectCache;
 
         constructor(constructorOptions?: SandDanceConstructorOptions) {
@@ -499,6 +537,8 @@ module powerbi.visuals.samples {
 
         public init(visualsOptions: VisualInitOptions): void {
             this.host = visualsOptions.host;
+
+            this.selectionManager = new SelectionManager({ hostServices: this.host });
 
             var style: IVisualStyle = visualsOptions.style;
 
@@ -523,6 +563,7 @@ module powerbi.visuals.samples {
                 this.saveSettings.bind(this),
                 this.loadSettings.bind(this),
                 this.changeChartType.bind(this),
+                this.onSelect.bind(this),
                 <HTMLElement> this.rootElement.node());
 
             this.application.setViewport(this.viewport.width, this.viewport.height);
@@ -868,6 +909,52 @@ module powerbi.visuals.samples {
             });
         }
 
+        private onSelect(settings: sandDance.SelectionData): void {
+            let selectors: Selector[] = [],
+                selectionNumber: number = SandDance.DefaultSettings.chart.selectionNumber;
+
+            if (this.dataView &&
+                this.dataView.settings &&
+                this.dataView.settings.chart) {
+                let currentSelectionNumber: number = this.dataView.settings.chart.selectionNumber;
+
+                selectionNumber = currentSelectionNumber > 0
+                    ? currentSelectionNumber
+                    : selectionNumber;
+            }
+
+            if (settings && settings.selectedRecords) {
+                settings.selectedRecords.forEach((selectedRecord: any) => {
+                    let selectionIndex: number = selectedRecord.__selectionIndexes;
+
+                    if (selectionIndex !== null && selectionIndex !== undefined && this.dataView && this.dataView.selectionIds) {
+                        selectors.push(this.dataView.selectionIds[selectionIndex].getSelector());
+                    }
+                });
+            }
+
+            this.setSelection(Selector.filterFromSelector(selectors.slice(0, selectionNumber)));
+        }
+
+        private setSelection(filter: SemanticFilter): void {
+            let instance: VisualObjectInstance;
+
+            instance = {
+                objectName: SandDance.Properties["general"]["filter"].objectName,
+                selector: undefined,
+                properties: {
+                    filter: filter
+                }
+            };
+
+            this.host.persistProperties(<VisualObjectInstancesToPersist>{
+                merge: [instance],
+                remove: []
+            });
+
+            this.host.onSelect({ data: [] });
+        }
+
         public update(visualUpdateOptions: VisualUpdateOptions): void {
             if (!visualUpdateOptions ||
                 !visualUpdateOptions.dataViews ||
@@ -941,7 +1028,9 @@ module powerbi.visuals.samples {
         }
 
         public converter(dataView: DataView): SandDanceDataView {
-            let data: SandDanceData = {};
+            let data: SandDanceData = <SandDanceData>{},
+                selectionIds: SelectionId[] = [],
+                selectionIndexes: number[] = [];
 
             if (dataView &&
                 dataView.table &&
@@ -949,16 +1038,24 @@ module powerbi.visuals.samples {
                 dataView.table.columns.length > 0 &&
                 dataView.table.rows) {
                 dataView.table.columns.forEach((column: DataViewMetadataColumn, index: number) => {
-                    data[column.displayName] = dataView.table.rows.map((row: any[]) => {
+                    data[column.displayName] = dataView.table.rows.map((row: any[], rowIndex: number) => {
+                        if (index === 0 && dataView.table.identity) {
+                            selectionIds.push(SelectionId.createWithId(dataView.table.identity[rowIndex]));
+                            selectionIndexes.push(rowIndex);
+                        }
+
                         return row[index];
                     });
                 });
             }
 
+            data.__selectionIndexes = selectionIndexes;
+
             return {
                 settings: this.parseSettings(dataView),
                 data: data,
-                highlights: this.parseHighlights(dataView)
+                highlights: this.parseHighlights(dataView),
+                selectionIds: selectionIds
             };
         }
 
@@ -1033,7 +1130,8 @@ module powerbi.visuals.samples {
             chartSettings.backgroundColor = this.getColor(SandDance.Properties["chart"]["backgroundColor"], defaultChartSettings.backgroundColor, objects);
             chartSettings.color = this.getColor(SandDance.Properties["chart"]["color"], defaultChartSettings.color, objects);
             chartSettings.panelBackgroundColor = this.getColor(SandDance.Properties["chart"]["panelBackgroundColor"], defaultChartSettings.panelBackgroundColor, objects);
-            chartSettings.fontSize = DataViewObjects.getValue(objects, SandDance.Properties["chart"]["fontSize"], defaultChartSettings.fontSize);
+            chartSettings.fontSize = DataViewObjects.getValue<number>(objects, SandDance.Properties["chart"]["fontSize"], defaultChartSettings.fontSize);
+            chartSettings.selectionNumber = DataViewObjects.getValue<number>(objects, SandDance.Properties["chart"]["selectionNumber"], defaultChartSettings.selectionNumber);
 
             return chartSettings;
         }
@@ -1149,7 +1247,8 @@ module powerbi.visuals.samples {
                     backgroundColor: this.dataView.settings.chart.backgroundColor,
                     color: this.dataView.settings.chart.color,
                     panelBackgroundColor: this.dataView.settings.chart.panelBackgroundColor,
-                    fontSize: this.dataView.settings.chart.fontSize
+                    fontSize: this.dataView.settings.chart.fontSize,
+                    selectionNumber: this.dataView.settings.chart.selectionNumber
                 }
             });
         }
