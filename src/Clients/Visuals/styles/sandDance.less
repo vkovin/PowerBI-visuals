@@ -804,10 +804,12 @@
 
     .panelText {
         // color: white;
-        background: none;
+        // background: none;
         opacity: 0.85;
-        padding: 4px;
+        padding: 5px;
         max-width: 150px;
+        box-sizing: content-box;
+        border: none;
     }
 
     .panelTextArea {
@@ -970,14 +972,18 @@
     }
     /*---- INSIGHT PANEL ----*/
     .insightPanel {
-        background: rgb(38, 36, 34);
+        // background: rgb(38, 36, 34);
         // color: white;
-        width: 240px;
+        // width: 240px;
+        width: 180px;
+        position: absolute;
+        display: none;
     }
 
     .insightTitleBar {
         border-bottom: 2px solid black;
-        padding: 10px 1px 10px 10px;
+        padding: 0 1px 0 0;
+        // padding: 10px 1px 10px 10px;
     }
 
     .insightCreateBar {
@@ -1007,7 +1013,8 @@
         border: 1px solid transparent;
         cursor: pointer;
         // color: white;
-        margin: 20px;
+        // margin: 20px;
+        margin: 15px;
     }
 
     .insightEntry:hover {
@@ -1375,7 +1382,7 @@
     }
 
     .iconBarSpacer {
-        width: 25px;
+        width: 10px;
     }
 
     .iconBarSpacer2 {
@@ -1389,6 +1396,7 @@
         cursor: pointer;
         opacity: 1;
         background: transparent;
+        display: inline-block;
     }
 
     .iconTextCombo:hover {
@@ -1425,6 +1433,7 @@
     /* ---- ICON/TEXT: TEXT ----*/
     .textOfCombo {
         // color: white;
+        display: inline;
         border: 0;
         background: none;
     }
@@ -1496,7 +1505,9 @@
     .iconBarIcon,
     .clickIcon:hover,
     .clickIcon:active,
-    .clickIcon[data-selected=true] {
+    .clickIcon[data-selected=true],
+    .imgCreateInsight,
+    .insightMenuButton {
         @backgroundHeight: 28px;
         @backgroundWidth: 28px;
         width: @backgroundWidth;
@@ -1504,12 +1515,22 @@
         background-size: @backgroundWidth @backgroundHeight;
     }
 
-    .closeButton {
+    .closeButtonSize,
+    .insightMenuButton,
+    .fnInsightFull,
+    .fnInsightData,
+    .fnInsightSelection,
+    .fnInsightView,
+    .fnInsightFilter {
         @elementSize: 20px;
         width: @elementSize !important;
         height: @elementSize !important;
-        background-image: data-uri("../images/sandDance/colorPanel_close.png");
         background-size: @elementSize @elementSize !important;
+    }
+
+    .closeButton {
+       .closeButtonSize();
+        background-image: data-uri("../images/sandDance/colorPanel_close.png");
     }
 
     .fnColPickerNone {
@@ -1548,11 +1569,11 @@
     }
 
     .insightBg {
-        background: transparent;
+        // background: transparent;
     }
 
     .insightBg:hover {
-        background: rgb(56, 53, 50);
+        background-color: rgb(56, 53, 50);
     }
     /*---- POPUP MENU ----*/
     .popupMenu {
@@ -1900,7 +1921,8 @@
         .xStuff {
             top: 10px;
             left: 49%;
-            max-width: 100px;
+            // max-width: 100px;
+            overflow: hidden;
             max-height: 40px;
             position: relative;
             border: 0 solid yellow;
@@ -2090,10 +2112,6 @@
         display: none !important;
     }
 
-    .undoButton,
-    .redoButton,
-    .insightButton,
-    .playIconButton,
     .facetBins {
         .display-none();
     }
@@ -2130,5 +2148,16 @@
 
     .rightButtonContainer .generalColPicker {
         right: 0;
+    }
+
+    .insightPanelControl {
+        float: right;
+    }
+
+    .editInsightPanel {
+        .panelText,
+        .panelTextArea {
+            color: black;
+        }
     }
 }

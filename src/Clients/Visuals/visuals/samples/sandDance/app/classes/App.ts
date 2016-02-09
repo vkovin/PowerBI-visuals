@@ -31,7 +31,7 @@ module beachPartyApp
 
         private coreApplicationInstance: beachParty.AppMgrClass;
 
-        private saveSettingsHandler: (settings: any, type: sandDance.SettingsType)  => void;
+        private saveSettingsHandler: (settings: any, type: sandDance.SettingsType) => void;
         private loadSettingsHandler: (type: sandDance.SettingsType) => any;
         private onChangeChartType: (chartType: string) => void;
         private onSelectionHandler: (settings: sandDance.SelectionData) => void;
@@ -484,7 +484,8 @@ module beachPartyApp
                             this.onSelectionHandler({
                                 recordCount: msgBlock.recordCount,
                                 selectedCount: msgBlock.selectedCount,
-                                selectedRecords: msgBlock.selectedRecords
+                                selectedRecords: msgBlock.selectedRecords,
+                                changeSource: msgBlock.changeSource
                             });
                         }
                     }, 10);
@@ -541,11 +542,33 @@ module beachPartyApp
                 }
             });
 
-            vp.select(window).attach("resize", (e) => //TODO: remove dependency by window!
-            {
-                this.layoutScreen();
+//             vp.select(window).attach("resize", (e) => //TODO: remove dependency by window!
+//             {
+//                 this.layoutScreen();
+// 
+//                 this.requestFullChartBuild();
+//             });
 
-                this.requestFullChartBuild();
+            $(".stopButton", this.container).on("click", () => {
+                this.stopPlayback();
+            });
+
+            $(".playExButton", this.container).on("click", () => {
+                this.onPlayExClick();
+            });
+
+            let insightPanel: JQuery = $(".insightPanel", this.container);
+
+            $(".iconTextCombo", insightPanel).on("click", () => {
+                this.addNewInsight();
+            });
+
+            $(".insightCloseButton", insightPanel).on("click", () => {
+                this.toggleInsightPanel(undefined);
+            });
+
+            $(".insightMenuButton", insightPanel).on("click", (e) => {
+                this.showInsightMenu(e);
             });
 
             this.layoutScreen();
@@ -770,11 +793,11 @@ module beachPartyApp
             this._yMapping = new bps.MappingData("", defaultBinCount);
             this._zMapping = new bps.MappingData("", 3);            // this._defaultBins);
 
-            this._insightMgr = new InsightMgrClass(this, this.settings, this.container);
+            this._insightMgr = new InsightMgrClass(this, this.settings, this.container, this.saveSettingsHandler, this.loadSettingsHandler);
             this._insightMgr.registerForChange("layout", (e) => this.layoutScreen());
             this._insightMgr.registerForChange("insightLoaded", (e) => this.loadInsight());
             this._insightMgr.registerForChange("currentInsight", (e) => this.onCurrentInsightChanged());
-            this._insightMgr.registerForChange("onAddInsightRequest", (name, changedBy, e) => this.addNewInsight(e));
+            this._insightMgr.registerForChange("onAddInsightRequest", (name, changedBy, e) => this.addNewInsight());
             this._insightMgr.registerForChange("playing", (e) => this.onInsightPlayingChanged());
             this._insightMgr.registerForChange("showInsightBar", (e) => this.onShowInsightBarChanged());
 
@@ -928,11 +951,11 @@ module beachPartyApp
 
             this.createIconTextPair(trW, "onUndoClick", "undo", "Undo the last action", "fnIconBarUndo", "Undo", false, true);
             this.createIconTextPair(trW, "onRedoClick", "redo", "Redo the last undone action", "fnIconBarRedo", "Redo", false, true);
-            // this.createSpacer(trW);
+            this.createSpacer(trW);
 
             this.createIconTextPair(trW, "toggleInsightPanel", "insight", "Toggle the insight panel open/closed", "fnIconBarToggleInsightNorm", "Insight", true, true);
             this.createIconTextPair(trW, "startPlayback", "playIcon", "Playback the current insights", "fnIconBarPlay", "Play", true, true);
-            // this.createSpacer(trW);
+            this.createSpacer(trW);
 
             this.createIconTextPair(trW, "onBeachPartyClick", "colorPanel_properties", "Open the Application Settings Panel", "colorPanel_properties_white", "Settings", false);
 
@@ -1221,7 +1244,7 @@ module beachPartyApp
             vp.select(this.container, ".searchPanel").css("display", (value) ? "none" : "");
             vp.select(this.container, ".btSettings").css("display", (value) ? "none" : "");
 
-            vp.select(this.container, ".playPanel").css("display", (value || isPaused) ? "" : "none");
+            vp.select(this.container, ".playPanel").css("display", (value || isPaused) ? "inline-block" : "none");
 
             //---- show/hide axis bins adjusters ----
             this.updateUiForLayoutChange(value);
@@ -1264,7 +1287,7 @@ module beachPartyApp
             this.layoutScreen();
         }
 
-        onPlayExClick(e)
+        onPlayExClick()
         {
             var text = vp.select(this.container, ".playExButton").text();
 
@@ -1456,7 +1479,7 @@ module beachPartyApp
             this.addBigBarEntry(trW, "bbSelect", "Selection", "View or clear the selection", (e) => this.onSelectionClick(e));
 
             //---- FILTER ----
-            this.addBigBarEntry(trW, "bbFilter", "Filter", "View or clear the filter", (e) => this.onFilterClick(e));
+            // this.addBigBarEntry(trW, "bbFilter", "Filter", "View or clear the filter", (e) => this.onFilterClick(e));
 
             //---- CHART OPTIONS ----
             this.addBigBarEntry(trW, "bbChart", "Chart Options", "Open the Chart Options panel", (e) => this.onChartOptionsClick(e), true, true);
@@ -1913,8 +1936,16 @@ module beachPartyApp
             return preload;
         }
 
-        public loadAppSettings() {
+        public loadAppSettings(): void {
             this.settings.loadAppSettings();
+        }
+
+        public loadInsightSession(): void {
+            if (this._insightMgr && this._insightMgr.loadSessionLocalFile) {
+                setTimeout(() => {
+                    this._insightMgr.loadSessionLocalFile(false);
+                }, 10);
+            }
         }
 
         loadInsight()
@@ -2014,14 +2045,14 @@ module beachPartyApp
                     //this.onInsightLoadCompleted();
                 });
             }
-            else if (insight.loadAction === bps.LoadAction.filter)
-            {
-                svd.filteredOutKeys = preload.filteredOutKeys;
-
-                this._insightWaitingForFilterChanged = true;
-                //this._insightCompletePending = true;
-                this._bpsHelper.setSystemViewData(svd);
-            }
+//             else if (insight.loadAction === bps.LoadAction.filter)
+//             {
+//                 svd.filteredOutKeys = preload.filteredOutKeys;
+// 
+//                 this._insightWaitingForFilterChanged = true;
+//                 //this._insightCompletePending = true;
+//                 this._bpsHelper.setSystemViewData(svd);
+//             }
             else if (insight.loadAction === bps.LoadAction.data)
             {
                 //this.onInsightLoadCompleted();
@@ -6159,7 +6190,7 @@ module beachPartyApp
             this._activeContextMenu = this._insightMgr.showInsightButtonContextMenu(e);
         }
 
-        addNewInsight(e)
+        addNewInsight()
         {
             this.createInsight(true, true, (insight) =>
             {
@@ -6318,8 +6349,8 @@ module beachPartyApp
             //---- INSIGHT PANEL ----
             vp.select(this.container, ".insightPanel")
                 .css("left", "10px")
-                .css("top", (th + 10) + "px")
-                .height(h - (th + 20));
+                .css("top", (th + 10) + "px");
+                // .height(h - (th + 20));
 
             //---- INSIGHT PANEL LIST ----
             vp.select(this.container, ".insightListHolder")

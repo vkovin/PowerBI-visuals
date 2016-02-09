@@ -4,6 +4,7 @@ module sandDance {
     export enum SettingsType {
         application,
         session,
-        preloads
+        preloads,
+        insightSession
     };
 }

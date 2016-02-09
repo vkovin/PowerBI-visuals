@@ -13,12 +13,14 @@ module beachPartyApp
 
     export class InsightMgrClass extends beachParty.DataChangerClass
     {
-        static insightWidth = 200;
-        static insightHeight = 130;
+        static insightWidth = 140;//200;
+        static insightHeight = 70;//130;
 
         private application: AppClass;
         private container: HTMLElement;
         private settings: AppSettingsMgr;
+        private saveSettingsHandler: (settings: any, type: sandDance.SettingsType) => void;
+        private loadSettingsHandler: (type: sandDance.SettingsType) => any;
 
         _session: InsightSession;
         _isShowingInsightsPanel = false;
@@ -43,13 +45,20 @@ module beachPartyApp
         _playbackDuration = 3;      // 3 seconds
         _isLooping = true;             // should playback restart once end is reached
 
-        constructor(application: AppClass, settings: AppSettingsMgr, container: HTMLElement)
+        constructor(
+            application: AppClass,
+            settings: AppSettingsMgr,
+            container: HTMLElement,
+            saveSettingsHandler: (settings: any, type: sandDance.SettingsType) => void,
+            loadSettingsHandler: (type: sandDance.SettingsType) => any)
         {
             super();
 
             this.application = application;
             this.settings = settings;
             this.container = container;
+            this.saveSettingsHandler = saveSettingsHandler;
+            this.loadSettingsHandler = loadSettingsHandler;
 
             this._session = new InsightSession();
         }
@@ -304,7 +313,8 @@ module beachPartyApp
             var rc = vp.select(this.container, ".insightMenuButton").getBounds(false);
 
             vp.select(pm.getRootElem())
-                .css("background", "rgb(69, 69, 69)")  // match color on button bg
+                // .css("background", "rgb(69, 69, 69)")  // match color on button bg
+                .css("background", this.application.getSettingsManager().getPanelBackgroundColor())
                 .css("border", "1px solid transparent") ;
 
             pm.show(rc.left + 8, rc.bottom);
@@ -377,7 +387,8 @@ module beachPartyApp
             var pt = vp.events.mousePosition(e);
 
             vp.select(pm.getRootElem())
-                .css("background", "rgb(69, 69, 69)")  // match color on button bg
+                .css("background", this.application.getSettingsManager().getPanelBackgroundColor())
+                // .css("background", "rgb(69, 69, 69)")  // match color on button bg
                 .css("border", "1px solid transparent") ;
 
             //this.setContextMenu(pm);
@@ -393,12 +404,29 @@ module beachPartyApp
 
         openEditInsightPanel(e, insight: InsightData)
         {
-            var pt = vp.events.mousePosition(e);
+            // var pt = vp.events.mousePosition(e);
 
             //---- make a copy of the specified insight for editing (in case we cancel, this makes it easy to reverse the changes) ----
             this._editInsight = vp.utils.copyMap(insight);
 
-            this._currentPanel = buildJsonPanel(this.application, this.settings, this.container, null, this, "editInsight", true, pt.x, pt.y, undefined, undefined, undefined, false);
+            this._currentPanel = buildJsonPanel(
+                this.application,
+                this.settings,
+                this.container,
+                null,
+                this,
+                "editInsight",
+                true,
+                undefined/*pt.x*/,
+                undefined/*pt.y*/,
+                undefined,
+                undefined,
+                undefined,
+                false,
+                false,
+                false,
+                false,
+                true);
 
             ////---- initialize TinyMCE rich text area to convert all textAreas into RICH text areas ----
             //tinymce.init({ selector: 'textarea', setupcontent_callback: "myCustomSetupContent" });
@@ -517,12 +545,19 @@ module beachPartyApp
             return fn;
         }
 
-        loadSessionLocalFile()
+        loadSessionLocalFile(forceUpdate: boolean = true)
         {
-            LocalFileHelper.loadFile(".bpSession", (text, fn) => 
-            {
-                this.loadSessionFromText(text, fn);
-            });
+            setTimeout(() => {
+                this.loadSessionFromText(
+                    this.loadSettingsHandler(sandDance.SettingsType.insightSession),
+                    "Power BI",
+                    forceUpdate);
+            }, 10);
+
+            // LocalFileHelper.loadFile(".bpSession", (text, fn) => 
+            // {
+            //     this.loadSessionFromText(text, fn);
+            // });
         }
 
         loadSessionFromServer(sessionUrl: string)
@@ -537,36 +572,38 @@ module beachPartyApp
             });
         }
 
-        loadSessionFromText(text: string, fn: string)
+        loadSessionFromText(text: any, fn: string, forceUpdate: boolean = true)
         {
             try
             {
-                var anyObj = JSON.parse(text);
+                var anyObj = /*JSON.parse(*/text/*)*/;
                 if (vp.utils.isArray(anyObj))
                 {
                     var session = new InsightSession();
                     session.version = .9;
 
                     session.insights = anyObj;
+
+                    this._session = session;
+                    this._sessionName = this.removeExt(fn);
+
+                    this.markRebuildNeeded(forceUpdate);
                 }
                 else
                 {
                     var session = <InsightSession > anyObj;
-                    if (session.version < .9)
-                    {
-                        throw "Error: invalid session file";
+
+                    if (session && session.version && session.version === 1) {
+                        this._session = session;
+                        this._sessionName = this.removeExt(fn);
+
+                        this.markRebuildNeeded(forceUpdate);
                     }
-
                 }
-
-                this._session = session;
-                this._sessionName = this.removeExt(fn);
-
-                this.markRebuildNeeded(true);
             }
             catch (ex)
             {
-                alert("Error parsing session file: " + ex);
+                console.warn("Error parsing session file: " + ex);
             }
         }
 
@@ -581,13 +618,17 @@ module beachPartyApp
 
         saveSession()
         {
-            var str = JSON.stringify(this._session);
+            // var str = JSON.stringify(this._session);
 
-            this.openSessionNamePanel(this._sessionName, (sessionName) =>
-            {
-                this._sessionName = sessionName;
-                LocalFileHelper.saveToLocalFile(sessionName + ".bpSession", str);
-            });
+            setTimeout(() => {
+                this.saveSettingsHandler(this._session, sandDance.SettingsType.insightSession);
+            }, 10);
+
+            // this.openSessionNamePanel(this._sessionName, (sessionName) =>
+            // {
+            //     this._sessionName = sessionName;
+            //     LocalFileHelper.saveToLocalFile(sessionName + ".bpSession", str);
+            // });
         }
 
         //getSharedServerRoot()
@@ -781,7 +822,7 @@ module beachPartyApp
                 return this._isShowingInsightsPanel;
             }
 
-            vp.select(this.container, ".insightPanel").css("display", (value) ? "" : "none");
+            vp.select(this.container, ".insightPanel").css("display", (value) ? "block" : "none");
 
             //this.layoutScreen();
             this.onDataChanged("layout");
@@ -799,11 +840,11 @@ module beachPartyApp
         {
             var items =
                 [
-                    new MenuItemData("Email session...", "Sends a URL for the current session to an email recepient"),
-                    new MenuItemData("Save session...", "Saves the current session as a file on your local machine"),
-                    new MenuItemData("-"),
-                    new MenuItemData("Load session...", "Loads a previous session from a file on your local machine"),
-                    new MenuItemData("Load QuickTest", "Loads the session used in the BeachParty team QuickTest"),
+                    // new MenuItemData("Email session...", "Sends a URL for the current session to an email recepient"),
+                    new MenuItemData("Save session...", "Saves the current session"),//Saves the current session as a file on your local machine
+                    // new MenuItemData("-"),
+                    // new MenuItemData("Load session...", "Loads a previous session from a file on your local machine"),
+                    // new MenuItemData("Load QuickTest", "Loads the session used in the BeachParty team QuickTest"),
                     new MenuItemData("-"),
                     new MenuItemData("New session", "Starts a new BeachParty session"),
 
@@ -883,26 +924,28 @@ module beachPartyApp
                 .css("width", "28px")
                 .css("position", "relative")
                 .css("top", "8px")
-                .css("left", "-2px")
+                .css("left", "0px")
                 .attach("click", (e) =>
                 {
                     this.onIconClick(e);
                 });
 
-            rowW.append("span")
+            var insightText = rowW.append("span")
                 .addClass("insightText")
                 .text(insight.name)
                 .css("position", "relative")
                 .css("left", "-8px")
-                .css("top", "-1px");
+                .css("top", "12px");
 
             //---- hook events on this insight entry ----
             var insightWElement = insightW.element();
 
             insightWElement.addEventListener("click", (e) => this.onInsightEntryClick(e));
 
-            // insightWElement.addEventListener("contextmenu", (e) => this.onInsightEntryRightClick(e));
-                //.attach("mousedown", (e) => this.onSelectEntry(e))
+            insightWElement.addEventListener("contextmenu", (e) => {
+                this.onInsightEntryRightClick(e);
+            });
+                // .attach("mousedown", (e) => this.onSelectEntry(e))
 
             if (insight === this._currentInsight)
             {
@@ -920,12 +963,12 @@ module beachPartyApp
             if (imageAsUrl)
             {
                 //---- add IMAGE ----
-                insightW.append("div")
+                insightW.append("img")
                     .addClass("insightImage")
                     //.css("position", "absolute")
                     //.css("left", "0px")
                     //.css("top", "0px")
-                    .addClass(imageAsUrl)
+                    .attr("src", imageAsUrl)
                     .css("background", this.settings._canvasColor)
                     .width(InsightMgrClass.insightWidth)
                     .height(InsightMgrClass.insightHeight)
@@ -939,6 +982,8 @@ module beachPartyApp
 
             insightW[0].insightObj = insight;
             iconW[0].insightObj = insight;
+            insightText[0].insightObj = insight;
+
             iconW[0].entryElem = insightW[0];
 
             this._insightEntryElems.push(insightW[0]);
@@ -947,7 +992,10 @@ module beachPartyApp
         onIconClick(e)
         {
             var iconElem = e.target;
-            var rc = vp.select(iconElem).getBounds(false);
+
+            var rc = vp.select(iconElem).getBounds(false),
+                container = vp.select(this.container).getBounds(false);
+
             var insight = <bps.InsightData>iconElem.insightObj;
 
             //---- show insight type menu ----
@@ -959,7 +1007,13 @@ module beachPartyApp
 
                 //---- update icon of insight in insight panel ----
                 var iconUrl = this.getIconUrl(insight.loadAction);
-                vp.select(iconElem).addClass(iconUrl);
+                vp.select(iconElem)
+                    .removeClass("fnInsightData")
+                    .removeClass("fnInsightFull")
+                    .removeClass("fnInsightSelection")
+                    .removeClass("fnInsightView")
+                    .removeClass("fnInsightFilter")
+                    .addClass(iconUrl);
 
                 //---- update tooltip on entryElem ----
                 var entryElem = iconElem.entryElem;
@@ -967,7 +1021,7 @@ module beachPartyApp
                 vp.select(entryElem).title(tip);
             });
 
-            picker.openWithoutOverlap(rc.left + 15, rc.top + 15);
+            picker.openWithoutOverlap(rc.left - container.left + 15, rc.top - container.top + 15);
 
             //---- cancel event to prevent LOAD of this icon ----
             vp.events.cancelEventBubble(e);
@@ -982,9 +1036,9 @@ module beachPartyApp
             menuItems.push(new MenuItemData("Data", "Change this into a data loading insight", "fnInsightData"));    
             menuItems.push(new MenuItemData("View", "Change this into a view loading insight", "fnInsightView"));   
             menuItems.push(new MenuItemData("Selection", "Change this into a selection loading insight", "fnInsightSelection"));  
-            menuItems.push(new MenuItemData("Filter", "Change this into a filter loading insight", "fnInsightFilter"));       
+            // menuItems.push(new MenuItemData("Filter", "Change this into a filter loading insight", "fnInsightFilter"));       
 
-            var picker = this.application.createGeneralPicker(null, "loadActionPicker", menuItems, callback, undefined, 28);
+            var picker = this.application.createGeneralPicker(null, "loadActionPicker", menuItems, callback, undefined/*, 28*/);
             return picker;
         }
 
@@ -1008,10 +1062,10 @@ module beachPartyApp
             {
                 url = "fnInsightSelection";
             }
-            else if (loadAction === bps.LoadAction.filter)
-            {
-                url = "fnInsightFilter";
-            }
+            // else if (loadAction === bps.LoadAction.filter)
+            // {
+            //     url = "fnInsightFilter";
+            // }
 
             return url;
         }
@@ -1035,7 +1089,7 @@ module beachPartyApp
             if (forceShow)
             {
                 vp.select(this.container, ".insightPanel")
-                    .css("display", "");             // show it;
+                    .css("display", "block");             // show it;
 
                 this._isShowingInsightsPanel = true;
             }

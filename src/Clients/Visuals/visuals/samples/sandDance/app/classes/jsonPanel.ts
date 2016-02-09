@@ -880,6 +880,7 @@ module beachPartyApp
             if (prompt)
             {
                 this.createLabel(tdW, prompt, row.tip);
+                tdW = rowW.append("td");
             }
 
             //---- add in next column ----

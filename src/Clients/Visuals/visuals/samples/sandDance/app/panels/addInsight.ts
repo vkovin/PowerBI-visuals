@@ -8,8 +8,8 @@ module sandDance {
         export var addInsight: any = {
             title: "Add Insight", tip: "Add the name and notes for an insight", rowSpacing: "6px", isDialog: true,
             rows: [
-                { text: "Name:", tip: "The name of the insight", dataName: "editInsightName", width: "300px" },
-                { textArea: "Notes:", tip: "Your notes about the insight", dataName: "editInsightNotes", width: "300px", height: "60px" },
+                { text: "Name:", tip: "The name of the insight", dataName: "editInsightName", width: "100px" },
+                { textArea: "Notes:", tip: "Your notes about the insight", dataName: "editInsightNotes", width: "150px", height: "50px" },
                 { col: 1, button: "OK", tip: "Close the panel and create the insight", textAlign: "right", acceptButton: true },
             ]
         };

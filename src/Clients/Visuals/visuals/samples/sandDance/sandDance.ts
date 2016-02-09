@@ -155,14 +155,20 @@ module powerbi.visuals.samples {
         activeColor: string;
     }
 
+    export interface SandDanceInsightSettings {
+        hasFilter: boolean;
+    }
+
     export interface SandDanceSettings {
         application: any;
         session: any;
         preloads: any;
+        insightSession: any;
         chart: SandDanceChartSettings;
         canvas: SandDanceCanvasSettings;
         labels: SandDanceLabelsSettings;
         toolbar: SandDanceToolbarSettings;
+        insight: SandDanceInsightSettings
     }
 
     interface PanelTable {
@@ -256,6 +262,12 @@ module powerbi.visuals.samples {
                     objectName: "toolbar",
                     propertyName: "activeColor"
                 }
+            },
+            insight: {
+                hasFilter: {
+                    objectName: "insight",
+                    propertyName: "hasFilter"
+                }
             }
         };
 
@@ -265,10 +277,26 @@ module powerbi.visuals.samples {
         private static PlayPanelSelector: ClassAndSelector = createClassAndSelector("playPanel");
         private static PlayExButtonSelector: ClassAndSelector = createClassAndSelector("playExButton");
         private static StopButtonSelector: ClassAndSelector = createClassAndSelector("stopButton");
+        private static IconTextComboSelector: ClassAndSelector = createClassAndSelector("iconTextCombo");
+        private static InsightBgSelector: ClassAndSelector = createClassAndSelector("insightBg");
+        private static IconOfComboSelector: ClassAndSelector = createClassAndSelector("iconOfCombo");
+        private static ImgCreateInsightSelector: ClassAndSelector = createClassAndSelector("imgCreateInsight");
+        private static TextOfComboSelector: ClassAndSelector = createClassAndSelector("textOfCombo");
 
         private static TextButtonSelector: ClassAndSelector = createClassAndSelector("textButton");
 
         private static IconBarSelector: ClassAndSelector = createClassAndSelector("iconBar");
+
+        private static InsightPanelSelector: ClassAndSelector = createClassAndSelector("insightPanel");
+        private static InsightTitleBarSelector: ClassAndSelector = createClassAndSelector("insightTitleBar");
+        private static InsightListHolderSelector: ClassAndSelector = createClassAndSelector("insightListHolder");
+        private static InsightListSelector: ClassAndSelector = createClassAndSelector("insightList");
+        private static CloseButtonSelector: ClassAndSelector= createClassAndSelector("closeButton");
+        private static ClickIconSelector: ClassAndSelector = createClassAndSelector("clickIcon");
+        private static InsightCloseButtonSelector: ClassAndSelector = createClassAndSelector("insightCloseButton");
+        private static InsightMenuButtonSelector: ClassAndSelector = createClassAndSelector("insightMenuButton");
+        private static FnInsightMenuSelector: ClassAndSelector = createClassAndSelector("fnInsightMenu");
+        private static InsightPanelControlSelector: ClassAndSelector = createClassAndSelector("insightPanelControl");
 
         private static SearchPanelSelector: ClassAndSelector = createClassAndSelector("searchPanel");
         private static BtSearchColSelector: ClassAndSelector = createClassAndSelector("btSearchCol");
@@ -325,10 +353,11 @@ module powerbi.visuals.samples {
             application: {},
             session: {},
             preloads: {},
+            insightSession: null,
             chart: {
                 chartType: chartType.types[1],
                 color: "#fff",
-                panelBackgroundColor: "#1C1A18",
+                panelBackgroundColor: "#262422",
                 fontSize: SandDance.DefaultFontSize,
                 backgroundColor: "#000",
                 selectionNumber: 250
@@ -347,6 +376,9 @@ module powerbi.visuals.samples {
                 backgroundColor: "#1C1A18",
                 color: "#6e6f71",
                 activeColor: "#fff"
+            },
+            insight: {
+                hasFilter: false
             }
         };
 
@@ -403,6 +435,15 @@ module powerbi.visuals.samples {
                 },
                 preloads: {
                     displayName: "Preloads",
+                    properties: {
+                        settings: {
+                            displayName: "Settings",
+                            type: { text: true }
+                        }
+                    }
+                },
+                insightSession: {
+                    displayName: "Insight Session",
                     properties: {
                         settings: {
                             displayName: "Settings",
@@ -488,6 +529,15 @@ module powerbi.visuals.samples {
                         activeColor: {
                             displayName: "Active Color",
                             type: { fill: { solid : { color: true } } }
+                        }
+                    }
+                },
+                insight: {
+                    displayName: "Insight",
+                    properties: {
+                        hasFilter: {
+                            displayName: "Use Filter",
+                            type: { bool: true }
                         }
                     }
                 }
@@ -599,7 +649,7 @@ module powerbi.visuals.samples {
 
             this.addFileInfo();
             this.addPlayAndIconBarElement();
-            //TODO: insightPanel ?
+            this.addInsightPanel();
             this.addBigBarElement();
             this.addLeftPanelElement();
             this.addSearchPanelElement();
@@ -647,6 +697,7 @@ module powerbi.visuals.samples {
 
             tdElement
                 .append("span")
+                .text("Stop")
                 .classed(SandDance.StopButtonSelector.class, true)
                 .classed(SandDance.TextButtonSelector.class, true);
 
@@ -659,6 +710,69 @@ module powerbi.visuals.samples {
                 .append("td")
                 .classed(SandDance.IconBarSelector.class, true)
                 .classed(SandDance.IconBarSelector.class, true);
+        }
+
+        private addInsightPanel(): void {
+            let insightPanel: D3.Selection,
+                insightTitleBar: D3.Selection,
+                insightListHolder: D3.Selection,
+                insightTr: D3.Selection,
+                insightSpan: D3.Selection;
+
+            insightPanel = this.mainElement
+                .append("div")
+                .classed(SandDance.InsightPanelSelector.class, true);
+
+            insightTitleBar = insightPanel
+                .append("div")
+                .classed(SandDance.InsightTitleBarSelector.class, true);
+
+            insightTr = insightTitleBar
+                .append("table")
+                .classed(SandDance.IconTextComboSelector.class, true)
+                .classed(SandDance.InsightBgSelector.class, true)
+                .append("tbody")
+                .append("tr");
+
+            insightTr
+                .append("td")
+                .append("div")
+                .classed("fnInsightCreate", true)
+                .classed(SandDance.IconOfComboSelector.class, true)
+                .classed(SandDance.ImgCreateInsightSelector.class, true);
+
+            insightTr
+                .append("td")
+                .append("span")
+                .classed(SandDance.TextOfComboSelector.class, true)
+                .classed(SandDance.InsightBgSelector.class, true)
+                .text("Add Insight");
+
+            insightSpan = insightTitleBar
+                .append("span")
+                .classed(SandDance.InsightPanelControlSelector.class, true);
+
+            insightSpan
+                .append("div")
+                .classed(SandDance.InsightMenuButtonSelector.class, true)
+                .classed(SandDance.ClickIconSelector.class, true)
+                .classed(SandDance.InsightBgSelector.class, true)
+                .classed(SandDance.FnInsightMenuSelector.class, true);
+
+            insightSpan
+                .append("div")
+                .classed(SandDance.CloseButtonSelector.class, true)
+                .classed(SandDance.ClickIconSelector.class, true)
+                .classed(SandDance.InsightCloseButtonSelector.class, true)
+                .classed(SandDance.InsightBgSelector.class, true);
+
+            insightListHolder = insightPanel
+                .append("div")
+                .classed(SandDance.InsightListHolderSelector.class, true);
+
+            insightListHolder
+                .append("div")
+                .classed(SandDance.InsightListSelector.class, true);
         }
 
         private addBigBarElement(): void {
@@ -909,9 +1023,16 @@ module powerbi.visuals.samples {
             });
         }
 
-        private onSelect(settings: sandDance.SelectionData): void {
+        private onSelect(selectionData: sandDance.SelectionData): void {
             let selectors: Selector[] = [],
+                hasSelection: boolean = ((this.dataView && this.dataView.settings && this.dataView.settings.insight) || SandDance.DefaultSettings.insight).hasFilter,
                 selectionNumber: number = SandDance.DefaultSettings.chart.selectionNumber;
+
+            if (selectionData &&
+                    selectionData.changeSource === "insight" &&
+                    !hasSelection) {
+                return;
+            }
 
             if (this.dataView &&
                 this.dataView.settings &&
@@ -923,8 +1044,8 @@ module powerbi.visuals.samples {
                     : selectionNumber;
             }
 
-            if (settings && settings.selectedRecords) {
-                settings.selectedRecords.forEach((selectedRecord: any) => {
+            if (selectionData && selectionData.selectedRecords) {
+                selectionData.selectedRecords.forEach((selectedRecord: any) => {
                     let selectionIndex: number = selectedRecord.__selectionIndexes;
 
                     if (selectionIndex !== null && selectionIndex !== undefined && this.dataView && this.dataView.selectionIds) {
@@ -990,6 +1111,7 @@ module powerbi.visuals.samples {
 
                 this.application.loadAppSettings();
                 this.application.loadLastSession();
+                this.application.loadInsightSession();
             }
 
             this.dataView = dataView;
@@ -1020,6 +1142,9 @@ module powerbi.visuals.samples {
             this.rootElement.selectAll(".popupMenu").style("background-color", settings.chart.panelBackgroundColor);
             this.rootElement.selectAll(".popupPanel").style("background-color", settings.chart.panelBackgroundColor);
             this.rootElement.selectAll(".panel").style("background-color", settings.chart.panelBackgroundColor);
+            this.rootElement.selectAll(".floatingPanel").style("background-color", settings.chart.panelBackgroundColor);
+            this.rootElement.selectAll(".insightPanel").style("background-color", settings.chart.panelBackgroundColor);
+            this.rootElement.selectAll(".pmInsights").style("background-color", settings.chart.panelBackgroundColor);
 
             this.application.changeCanvasColor(settings.canvas.backgroundColor);
             this.application.setShapeColor(settings.canvas.shapeColor);
@@ -1095,14 +1220,20 @@ module powerbi.visuals.samples {
                 settingsNames: string[] = [
                     "application",
                     "session",
-                    "preloads"
+                    "preloads",
+                    "insightSession"
                 ];
 
             settingsNames.forEach((settingsName: string) => {
                 let currentSettings: any;
 
                 if (objects[settingsName] && objects[settingsName]["settings"]) {
-                    currentSettings = JSON.parse(<string> objects[settingsName]["settings"]);
+                    try {
+                        currentSettings = JSON.parse(<string> objects[settingsName]["settings"]);
+                    }
+                    catch (e) {
+                        currentSettings = {};
+                    }
                 } else {
                     currentSettings = {};
                 }
@@ -1114,6 +1245,7 @@ module powerbi.visuals.samples {
             settings.canvas = this.parseCanvasSettings(objects);
             settings.labels = this.parseLabelsSettings(objects);
             settings.toolbar = this.parseToolbarSettings(objects);
+            settings.insight = this.parseInsightSettings(objects);
 
             return settings;
         }
@@ -1167,6 +1299,15 @@ module powerbi.visuals.samples {
             toolbarSettings.activeColor = this.getColor(SandDance.Properties["toolbar"]["activeColor"], defaultToolbarSettings.activeColor, objects);
 
             return toolbarSettings;
+        }
+
+        private parseInsightSettings(objects: DataViewObjects): SandDanceInsightSettings {
+            let insightSettings: SandDanceInsightSettings = <SandDanceInsightSettings> {},
+                defaultInsightSettings: SandDanceInsightSettings = SandDance.DefaultSettings.insight;
+
+            insightSettings.hasFilter = DataViewObjects.getValue<boolean>(objects, SandDance.Properties["insight"]["hasFilter"], defaultInsightSettings.hasFilter);
+
+            return insightSettings;
         }
 
         private getColor(properties: DataViewObjectPropertyIdentifier, defaultColor: string, objects: DataViewObjects): string {
@@ -1232,6 +1373,10 @@ module powerbi.visuals.samples {
                     this.enumerateToolbar(enumeration);
                     break;
                 }
+                case "insight": {
+                    this.enumerateInsight(enumeration);
+                    break;
+                }
             }
 
             return enumeration.complete();
@@ -1288,6 +1433,17 @@ module powerbi.visuals.samples {
                     backgroundColor: this.dataView.settings.toolbar.backgroundColor,
                     color: this.dataView.settings.toolbar.color,
                     activeColor: this.dataView.settings.toolbar.activeColor
+                }
+            });
+        }
+
+        private enumerateInsight(enumeration: ObjectEnumerationBuilder): void {
+            enumeration.pushInstance({
+                objectName: "insight",
+                displayName: "insight",
+                selector: null,
+                properties: {
+                    hasFilter: this.dataView.settings.insight.hasFilter
                 }
             });
         }

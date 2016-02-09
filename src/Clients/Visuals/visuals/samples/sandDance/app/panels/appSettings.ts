@@ -120,14 +120,14 @@ module sandDance {
                     ]
                 },
 
-                // {
-                //     tabName: "Insights", tip: "Inight playback and other insight-related options", rows:
-                //     [
-                //         { prompt: "Insight playback:", tip: "Insight playback options" },
-                //         { col: 1, numAdjuster: "Duration:", tip: "Sets the duration of each insight during playback, in seconds", min: 0, max: 99, roundValues: false, dataName: "playbackDuration" },
-                //         { col: 1, checkbox: "Loop", tip: "When set to true, playback restarts after playing the last insight", dataName: "isPlaybackLooping" },
-                //     ]
-                // },
+                {
+                    tabName: "Insights", tip: "Inight playback and other insight-related options", rows:
+                    [
+                        { prompt: "Insight playback:", tip: "Insight playback options" },
+                        { col: 1, numAdjuster: "Duration:", tip: "Sets the duration of each insight during playback, in seconds", min: 0, max: 99, roundValues: false, dataName: "playbackDuration" },
+                        { col: 1, checkbox: "Loop", tip: "When set to true, playback restarts after playing the last insight", dataName: "isPlaybackLooping" },
+                    ]
+                },
 
 //                 {
 //                     tabName: "Startup", tip: "Controls initial settings for SandDance", rows:

@@ -1091,7 +1091,7 @@ module bps
     {
         all,
         selection,
-        filter,
+        // filter,
         view,
         data,
     }
