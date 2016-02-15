@@ -16,13 +16,15 @@ module beachParty
         private _view: DataViewClass;
         private _svgDoc: HTMLElement;
         private _canvasElem: HTMLCanvasElement;
+        private _enableDragObj = false;
+        private _isDragging = false;
         private _ptLastDown = { x: 0, y: 0 };
         private _svgWidth = 0;
         private _svgHeight = 0;
         private _showDebugStats = true;
         private _showFileInfo = true;
         private _ptTouch = { x: 0, y: 0 };
-        private _areTransformsEnabled = false;
+        private _transformMode = bps.TransformMode.none;
         private _transformWheel: TransformWheelClass;
         private _transformMgr: TransformMgrClass; 
         private _isMouseDown = false;
@@ -106,7 +108,7 @@ module beachParty
 
             this.onDataStreamChanged();
 
-            this.areTransformsEnabled(false);
+            // this.areTransformsEnabled(false);
 
             canvasElem.tabIndex = 0;
             canvasElem.focus();
@@ -188,19 +190,25 @@ module beachParty
         //    this._view.hitTestRectWithSelect(this._rcDragAndHold, selectMode);
         //}
 
-        areTransformsEnabled(value?: boolean)
+        transformMode(value?: bps.TransformMode)
         {
-            if (value === undefined || value === null)
+            if (value === undefined)
             {
-                return this._areTransformsEnabled;
+                return this._transformMode;
             }
 
-            this._areTransformsEnabled = value;
-            this._transformWheel.isActive(value && this._showWheelDuringTransformMode);
+            this._transformMode = value;
+
+            if (value == bps.TransformMode.wheel)
+            {
+                this.showWheelDuringTransformMode(true);
+            }
+
+            this._transformWheel.isActive(value == bps.TransformMode.wheel || (value != bps.TransformMode.none && this._showWheelDuringTransformMode));
 
             if (this._hammertime)
             {
-                if (value)
+                if (value != bps.TransformMode.none)
                 {
                     //---- ENABLE panning (aka, mouseMove) ----
                     this._hammertime.get('pan').set({ direction: (<any>Hammer).DIRECTION_ALL });
@@ -212,19 +220,19 @@ module beachParty
                 }
             }
 
-            this.onDataChanged("areTransformsEnabled");
+            this.onDataChanged("transformMode");
         }
 
         showWheelDuringTransformMode(value?: boolean)
         {
-            if (value === undefined || value === null)
+            if (value === undefined)
             {
                 return this._showWheelDuringTransformMode;
             }
 
             this._showWheelDuringTransformMode = value;
 
-            this._transformWheel.isActive(value && this._areTransformsEnabled);
+            this._transformWheel.isActive(value && this._transformMode != bps.TransformMode.none);
 
             this.onDataChanged("showWheelDuringTransformMode");
         }
@@ -288,6 +296,46 @@ module beachParty
         getTransformMgr()
         {
             return this._transformMgr;
+        }
+
+        zoomOnData(rcZoom: ClientRect, zoomOut: boolean)
+        {
+            var rcw = this._transformMgr.getTransformer().getWorldBounds();
+            var plotWidth = rcw.right - rcw.left;
+            var plotHeight = rcw.top - rcw.bottom;
+
+            //---- adjust rcZoom from chart-relative to plot-relative ----
+            var rcf = this._view.getChart().getPlotBoundsInPixels();
+            rcZoom = vp.geom.createRect(rcZoom.left - rcf.left, rcZoom.top - rcf.top, rcZoom.width, rcZoom.height);
+
+            var rcz = this._transformMgr.getTransformer().screenToWorldBounds(rcZoom);
+
+            //---- calcuate zoom factors needed to make rcZoom fill the plot ----
+            var xZoom = plotWidth / rcz.width;
+            var yZoom = plotHeight / rcz.height;
+
+            var zoomFactor = Math.min(xZoom, yZoom);
+            if (zoomOut)
+            {
+                zoomFactor = 1 / zoomFactor;
+            }
+
+            var ptCenter = { x: (rcZoom.right - rcZoom.left) / 2, y: (rcZoom.top - rcZoom.bottom) / 2, z: 0};
+            this._transformMgr.scaleCameraRelative(zoomFactor, ptCenter);
+
+            //---- translation needed ----
+            var cwx = rcw.left + plotWidth / 2;
+            var cwy = rcw.bottom + plotHeight / 2;
+
+            var czx = rcz.left + rcz.width / 2;
+            var czy = rcz.bottom - rcz.height / 2;
+
+            var xOffset = cwx - czx;
+            var yOffset = cwy - czy;
+            this._transformMgr.getTransformer().translateMatrixEx(zoomFactor*xOffset, zoomFactor*yOffset, 0);
+
+            //---- rebuild axis labels to match new transform ----
+            this._view.getChart().buildChartFrame();
         }
 
         resetStuff()
@@ -401,7 +449,7 @@ module beachParty
             //---- "wheel" replaces the depreciated "mousewheel" event ----
             vp.events.attach(window, "wheel", (e) =>
             {
-                if (this._areTransformsEnabled)
+                if (this._transformMode != bps.TransformMode.none)
                 {
                     var mousePos = vp.events.mousePosition(e, this._svgDoc);
                     var wheelDelta = (Math.abs(e.deltaX) > Math.abs(e.deltaY)) ? e.deltaX : e.deltaY;
@@ -442,8 +490,6 @@ module beachParty
         /** called from "pointerDown" event (for IE touch and mouse) and from "mouseDown" event (for non IE). */
         onMouseDown(e)
         {
-            // this._transformWheel.show(true);
-
             this._transformMgr.onUiOpStart();
             this._isMouseDown = true;
 
@@ -473,7 +519,7 @@ module beachParty
         {
             this.stopWheelTimer();
 
-            if (this._areTransformsEnabled)
+            if (this._transformMode != bps.TransformMode.none)
             {
                 this._wheelTimer = setTimeout((e) =>
                 {
@@ -486,7 +532,6 @@ module beachParty
         hookHammerEvents()
         {
             var hammerOpts = { preventDefault: false };
-
             var hammertime = new (<any>Hammer)(this._svgDoc, hammerOpts);
             this._hammertime = hammertime;
 
@@ -533,7 +578,7 @@ module beachParty
 
             hammertime.on('pinch', (e) =>
             {
-                if (this._isTouchEnabled && this._areTransformsEnabled)
+                if (this._isTouchEnabled && this._transformMode != bps.TransformMode.none)
                 {
                     //---- ignore single finger when user is removing 1 finger at a time from pinch ----
                     var pointerCount = e.pointers.length;
@@ -542,7 +587,7 @@ module beachParty
                         this._isPinching = true;
                         var touchPos = this.avgTouchPosition(e);
 
-                        vp.utils.debug("--> pinch event: x==" + touchPos.x + ", y=" + touchPos.y + ", scale=" + e.scale);
+                        // vp.utils.debug("--> pinch event: x==" + touchPos.x + ", y=" + touchPos.y + ", scale=" + e.scale);
 
                         this._transformMgr.scaleCameraAbsolute(e.scale, touchPos);
 
@@ -614,8 +659,11 @@ module beachParty
 
         onPanEvent(e)
         {
-            if (this._areTransformsEnabled)
+            if (this._transformMode != bps.TransformMode.none)
             {
+                var rotStep = Math.PI / 64;
+                var view = this._view;
+
                 var lastTouch = this._ptTouch;
                 var thisTouch = this.avgTouchPosition(e);
 
@@ -627,6 +675,9 @@ module beachParty
                 var partTouched = this.get3dWheelPartTouched(this._ptLastDown);
 
                 this._ptTouch = thisTouch;
+
+                var xDir = (deltaX >= 0) ? 1 : -1;
+                var yDir = (deltaY >= 0) ? 1 : -1;
 
                 var delta = (Math.abs(deltaX) > Math.abs(deltaY)) ? deltaX : deltaY;
                 var speedFactor = 1 / 100;
@@ -657,29 +708,47 @@ module beachParty
                 //    }
                 //}
 
-                if ((e.srcEvent.ctrlKey && e.srcEvent.shiftKey) || (partTouched === "circle"))
-                {
-                    //---- CTRL + SHIFT + drag = SPIN ----
-                    this._transformMgr.rotateMatrixZ(delta * speedFactor);
-                }
+                var forceRotate = (this._transformMode == bps.TransformMode.rotate);
+                var forceMove = (this._transformMode == bps.TransformMode.pan);
 
-                if ((e.srcEvent.ctrlKey) || (partTouched === "hBar") || (partTouched === "middle"))
-                {
-                    //---- CTRL + drag = TURN ----
-                    this._transformMgr.rotateMatrixY(-deltaX * speedFactor);
-                }
-
-                if ((e.srcEvent.shiftKey) || (partTouched === "vBar") || (partTouched === "middle"))
-                {
-                    //---- SHIFT + drag = FLIP ----
-                    this._transformMgr.rotateMatrixX(-deltaY * speedFactor);
-                }
-
-                if ((!e.srcEvent.shiftKey) && (!e.srcEvent.ctrlKey) && (partTouched === ""))
+                if (forceMove)
                 {
                     //---- MOVE ----
                     var mousePos = vp.events.mousePosition(e, this._canvasElem);
                     this._transformMgr.moveCamera(e.deltaX / 100, -e.deltaY / 100, mousePos);
+                }
+                else
+                {
+                    //---- ROTATE, AUTO, or WHEEL mode ----
+                    if (forceRotate)
+                    {
+                        partTouched = "middle";
+                    }
+
+                    if ((e.srcEvent.ctrlKey && e.srcEvent.shiftKey) || (partTouched === "circle"))
+                    {
+                        //---- CTRL + SHIFT + drag = SPIN ----
+                        this._transformMgr.rotateMatrixZ(delta * speedFactor);
+                    }
+
+                    if ((e.srcEvent.ctrlKey) || (partTouched === "hBar") || (partTouched === "middle"))
+                    {
+                        //---- CTRL + drag = TURN ----
+                        this._transformMgr.rotateMatrixY(-deltaX * speedFactor);
+                    }
+
+                    if ((e.srcEvent.shiftKey) || (partTouched === "vBar") || (partTouched === "middle"))
+                    {
+                        //---- SHIFT + drag = FLIP ----
+                        this._transformMgr.rotateMatrixX(-deltaY * speedFactor);
+                    }
+
+                    if ((!e.srcEvent.shiftKey) && (!e.srcEvent.ctrlKey) && (partTouched === ""))
+                    {
+                        //---- MOVE ----
+                        var mousePos = vp.events.mousePosition(e, this._canvasElem);
+                        this._transformMgr.moveCamera(e.deltaX / 100, -e.deltaY / 100, mousePos);
+                    }
                 }
 
                 this.setNextMsgDelay();
@@ -849,7 +918,7 @@ module beachParty
         {
             vp.utils.debug("onPlotMouseMove");
 
-            if (this._areTransformsEnabled)
+            if (this._transformMode != bps.TransformMode.none)
             {
                 var pt = this.avgTouchPosition(e);
                 var partTouched = this.get3dWheelPartTouched(pt);
@@ -879,7 +948,7 @@ module beachParty
 
             this._transformMgr.onUiOpStop();
 
-            if (this._areTransformsEnabled) 
+            if (this._transformMode != bps.TransformMode.none)
             {
                 this._transformWheel.show(this._showWheelDuringTransformMode/* || true*/);
 
@@ -898,7 +967,7 @@ module beachParty
         {
             var hasInertia = this._transformMgr.onFrame();
 
-            if ((this._areTransformsEnabled) && (! this._isMouseDown))
+            if ((this._transformMode != bps.TransformMode.none) && (! this._isMouseDown))
             {
                 var showIt = (this._showWheelDuringTransformMode && (!hasInertia));
 

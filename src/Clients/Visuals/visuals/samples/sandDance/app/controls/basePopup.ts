@@ -14,8 +14,11 @@ module beachPartyApp
         left: number;
     }
 
-    export class BasePopupClass extends beachParty.DataChangerClass implements IAppControl
+    export class BasePopupClass extends BaseAppControlClass
     {
+        protected startPosition: PositionOfPanel;
+        protected currentPosition: PositionOfPanel;
+
         protected application: AppClass;
         protected container: HTMLElement;
 
@@ -29,9 +32,6 @@ module beachPartyApp
             return this._bigBarElement;
         }
 
-        protected startPosition: PositionOfPanel;
-        protected currentPosition: PositionOfPanel;
-
         _root: HTMLElement;
         _ownerElem: HTMLElement;            // not the document parent, but another popup that this popup belongs to
 
@@ -39,11 +39,14 @@ module beachPartyApp
         _keyboardFunc = null;
         _mouseDownFunc = null;
         _dblClickFunc = null;
+        _autoCloseOnDblClick = true;
+        _autoCloseOnOwnerMouseDown = true;      // apply autoClose to me if mouseDown on my owner
+        _autoCloseOnOwneeMouseDown = false;     // apply autoClose to me if mouseDown on an element that I own
 
         _openerIds: string;       // id's of UI elements that can open this panel
         _popupId: number;
-        _hasTitle = false;
 
+        /** "openerIds" are id's of controls that can open this panel. */
         constructor(application: AppClass, container: HTMLElement, openerIds: string, ownerElem?: HTMLElement)
         {
             super();
@@ -55,6 +58,45 @@ module beachPartyApp
             this.installEventHandlers();
             this._popupId = nextId++;
             this._ownerElem = ownerElem;
+
+            //---- if "ownerElem" is based on basePopupClass, we will hook its close and close this object ---
+            if (ownerElem)
+            {
+                var ownerParent = this.getTopLevelParent(ownerElem);
+                var jsObj = (<any>ownerParent).jsObj;
+                if (jsObj && jsObj instanceof BasePopupClass)
+                {
+                    var ownerPopup = <BasePopupClass>jsObj;
+                    ownerPopup.registerForChange("close", (e) =>
+                    {
+                        if (this.isAutoClose())
+                        {
+                            //--- if our owner closes, we should close ----
+                            this.close();
+                        }
+                    })
+                }
+            }
+        }
+
+        openWithoutPosition(): void {
+            var rootW = vp.select(this._root);
+
+            rootW[0].focus();
+
+            //---- set our button to "selected" state ----
+            this.setOpenerSelected(true);
+        }
+
+        getTopLevelParent(elem: HTMLElement)
+        {
+            var parent = elem;
+            while (parent && parent.parentNode && parent.parentNode != document.body)
+            {
+                parent = parent.parentElement;
+            }
+
+            return parent;
         }
 
         setOpenerSelected(value: boolean)
@@ -70,27 +112,24 @@ module beachPartyApp
             }
         }
 
-        getRootElem()
-        {
-            return this._root;
-        }
-
-        show(left: number, top: number, right?: number, bottom?: number)
+        showAt(left: number, top: number, right?: number, bottom?: number)
         {
             this.hide();
 
-            var rc = this.container.getBoundingClientRect();
+            var pickerElem = this.getRootElem();
+            var rcPicker = vp.select(pickerElem).getBounds(false);
 
-            this.openWithoutOverlap(left - rc.left, top - rc.top);
-        }
+            if (right != undefined)
+            {
+                left = (innerWidth-right) - rcPicker.width;
+            }
 
-        openWithoutPosition(): void {
-            var rootW = vp.select(this._root);
+            if (bottom != undefined)
+            {
+                top = (innerHeight-bottom) - rcPicker.height;
+            }
 
-            rootW[0].focus();
-
-            //---- set our button to "selected" state ----
-            this.setOpenerSelected(true);
+            this.openWithoutOverlap(left, top);
         }
 
         /** Open the specified panel so that it is near x,y but not overlapping with any of the 4 window edges. */
@@ -156,7 +195,8 @@ module beachPartyApp
 
             rootW
                 .css("left", x + "px")
-                .css("top", yTop + "px");
+                .css("top", yTop + "px")
+                .show(true);
 
             rootW[0].focus();
 
@@ -174,46 +214,62 @@ module beachPartyApp
 
         onMyDblClick(e)
         {
-            if (!this._hasTitle)
+            if (this._autoCloseOnDblClick && this.isAutoClose())
             {
                 this.close();
             }
         }
 
+        /** is overriden by subclasses, like basePopup. */
+        isAutoClose()
+        {
+            return true;
+        }
+
+        doesElementBelongToMe(elem: HTMLElement)
+        {
+            var parent = elem;
+
+            //---- get top-most element OR owner (whichever comes first)  ----
+            while (parent && parent != this._root && parent != this._ownerElem && parent.parentElement && 
+                parent.parentElement != document.body)
+            {
+                parent = parent.parentElement;
+            }
+
+            var isMyElem = (parent == this._root ||
+                (!this._autoCloseOnOwnerMouseDown && parent == this._ownerElem));
+
+            if (!isMyElem && !this._autoCloseOnOwneeMouseDown)
+            {
+                //---- see if this was a child popup belonging to me or one of my controls ----
+                var anyParent = <any>parent;
+
+                if (anyParent && anyParent.jsObj)
+                {
+                    var jsObj = anyParent.jsObj;
+
+                    if (jsObj instanceof BasePopupClass)
+                    {
+                        var popup = <BasePopupClass>jsObj;
+
+                        isMyElem = this.doesElementBelongToMe(popup._ownerElem);
+                    }
+                }
+            }
+
+            return isMyElem;
+        }
+
         onAnyMouseDown(e)
         {
-            if (e && e.target && (!this._hasTitle))
+            if (e && e.target && (this.isAutoClose()))
             {
                 var elem = e.target;
-                var parent = elem;
 
-                //---- get top-most element (but not null) ----
-                while (parent && parent !== this._root && parent.parentElement)
-                {
-                    if (vp.select(parent).hasClass("popupMenu"))
-                    {
-                        break;
-                    }
+                var isMyElem = this.doesElementBelongToMe(elem);
 
-                    parent = parent.parentElement;
-                }
-
-                var isMyElem = (parent === this._root);
-
-                if (!isMyElem)
-                {
-                    //---- see if this was a child popup of me ----
-                    if (parent && parent.jsObj)
-                    {
-                        var popup = <BasePopupClass>parent.jsObj;
-                        if (popup._ownerElem === this._root)
-                        {
-                            isMyElem = true;
-                        }
-                    }
-                }
-
-                if (!isMyElem)
+                if (! isMyElem)
                 {
                     //---- mouse clicked on an element that is NOT part of this popup/panel ----
                     this.close();
@@ -288,49 +344,21 @@ module beachPartyApp
 
         hide()
         {
-            var elem = this._root;
+            super.hide();
 
             //---- remove our DOCUMENT event handlers ----
             this.container.removeEventListener("keydown", this._keyboardFunc);
             this.container.removeEventListener("mousedown", this._mouseDownFunc);
             this._root.removeEventListener("dblclick", this._dblClickFunc);
-
-            if (this.isVisible())
-            {
-                //vp.utils.debug("popupMenu.hide: isVisible=true");
-
-                vp.select(elem).hide();
-
-                //appClass.instance.onPopupHidden(this._className);
-            }
-        }
-
-        remove()
-        {
-            this.hide();
-
-            vp.select(this._root)
-                .remove();
         }
 
         /** Remove the panel from the DOM and unhook non-DOM event handlers on this._dataOwner. */
         close()
         {
-            this.remove();
-
-            this.application.logAction(Gesture.click, null, ElementType.button, Action.close, Target.unknownPanel, true);
+            super.close();
 
             //---- set our button to NOT "selected" state ----
             this.setOpenerSelected(false);
-
-            this.onDataChanged("close");
         }
     }
-
-    export interface IAppControl
-    {
-        getRootElem(): HTMLElement;
-        close();
-    }
-
 }

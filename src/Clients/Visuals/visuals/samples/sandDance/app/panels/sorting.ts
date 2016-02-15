@@ -13,6 +13,8 @@
 module sandDance {
     export module panels {
         export var sorting: any = {
+            title: "Sort by",
+            autoClose: true,
             tabs:
             [
                 {
@@ -21,7 +23,10 @@ module sandDance {
                     [
                         { checkbox: "Ascending", tip: "Sort items in ascending order (smallest to largest)", dataName: "isItemSortAscending", marginBottom: 6 },
                         { button: "Sort by color", tip: "Sets the item sort column to the color mapping column", dataName: "onItemsByColorClick", marginBottom: 6 },
-                        { colPickerList: "", tip: "Sets column used to map facet", includeNone: true, dataName: "sortItemColumn", marginRight: -3 },
+                        {
+                            colPickerList: "", tip: "Sets column used to map facet", includeNone: true,
+                            dataName: "sortItemColumn", marginRight: -9, closeAction: true,
+                        },
                     ]
                 },
 

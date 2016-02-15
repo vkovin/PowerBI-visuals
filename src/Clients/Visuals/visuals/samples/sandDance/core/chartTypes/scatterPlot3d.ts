@@ -14,6 +14,11 @@ module beachParty
         constructor(view: DataViewClass, gl: any, chartState: any, container: HTMLElement, appMgr: AppMgrClass)
         {
             super("scatterPlot3dClass", view, gl, chartState, container, appMgr);
+
+            var transformMgr = this._view.getTransformMgr();
+
+            //---- zoom camera out a bit so we can see full bounding box ----
+            transformMgr.scaleCameraRelative(1 / 1.3, { x: 0, y: 0 });
         }
 
         preLayoutLoop(dc: DrawContext)
@@ -21,27 +26,21 @@ module beachParty
             this._maxShapeSize = dc.maxShapeSize;       //  chartUtils.getScatterShapeSize(dc);
         }
 
-        layoutDataForRecord(i: number, dc: DrawContext)
+        layoutDataForRecord(i: number, dc: DrawContext, dr: bps.LayoutResult)
         {
             var nv = dc.nvData;
             var scales = dc.scales;
 
-            var x = this.scaleColData(nv.x, i, scales.x);
-            var y = this.scaleColData(nv.y, i, scales.y);
-            var z = this.scaleColData(nv.z, i, scales.z);
+            dr.x = this.scaleColData(nv.x, i, scales.x);
+            dr.y = this.scaleColData(nv.y, i, scales.y);
+            dr.z = this.scaleColData(nv.z, i, scales.z);
 
-            var width = this._maxShapeSize * this.scaleColData(nv.size, i, scales.size, 1);
-            var height = width;
-            var depth = width;          // .1 / dc.combinedSizeFactor;
+            dr.width = this._maxShapeSize * this.scaleColData(nv.size, i, scales.size, 1);
+            dr.height = dr.width;
+            dr.depth = dr.width;          // .1 / dc.combinedSizeFactor;
 
-            var colorIndex = this.scaleColData(nv.colorIndex, i, scales.colorIndex);
-            var imageIndex = this.scaleColData(nv.imageIndex, i, dc.scales.imageIndex);
-            var opacity = 1;
-
-            return {
-                x: x, y: y, z: z, width: width, height: height, depth: depth, colorIndex: colorIndex, opacity: opacity,
-                imageIndex: imageIndex, theta: 0,
-            };
+            dr.colorIndex = this.scaleColData(nv.colorIndex, i, scales.colorIndex);
+            dr.imageIndex = this.scaleColData(nv.imageIndex, i, dc.scales.imageIndex);
         }
     }
 }

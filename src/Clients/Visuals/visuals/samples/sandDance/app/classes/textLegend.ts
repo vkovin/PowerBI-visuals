@@ -56,13 +56,19 @@ module beachPartyApp
             this.updateLegend();
         }
 
+        show(value: boolean)
+        {
+            vp.select(this._rootElem)
+                .css("display", (value) ? "block" : "none")
+        }
+
         updateLegend()
         {
             var tm = this._tm;
             var name = tm.colName;
 
-            vp.select(this._rootElem)
-                .css("display", (name) ? "block" : "none");
+            //---- show/hide legend ----
+            this.show(name != null);
 
             vp.select(this._titleElem)
                 .text(name);

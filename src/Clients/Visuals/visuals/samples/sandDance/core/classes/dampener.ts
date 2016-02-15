@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    dampener.ts - class for smoothing out drag/pinch motion, as applied to world matrix.
 //-------------------------------------------------------------------------------------
 

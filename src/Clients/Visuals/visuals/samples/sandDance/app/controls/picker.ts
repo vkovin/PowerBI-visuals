@@ -9,6 +9,8 @@ module beachPartyApp
 {
     export class PickerClass extends beachParty.DataChangerClass 
     {
+        static nextPickerClassButtonId = 1;
+
         private application: AppClass;
         private container: HTMLElement;
 
@@ -20,6 +22,7 @@ module beachPartyApp
         _values: string[];
         _value: string;     
         _iconWidth: number;
+        _openerIds: string;
 
         constructor(application: AppClass, container: HTMLElement, parentElem: HTMLElement, prompt: string, values: string[], initialValue: string, tooltip: string,
             capitalizeFirstValue?: boolean, iconWidth?: number)
@@ -39,7 +42,7 @@ module beachPartyApp
                 var spanW = vp.select(parentElem).append("span");
 
                 //---- prompt: TYPE ----
-                spanW.append("span")
+                var promptW = spanW.append("span")
                     .addClass("panelPrompt")
                     .text(prompt)
                     .css("margin-right", "4px");
@@ -52,7 +55,10 @@ module beachPartyApp
                 .addClass("panelButton")
                 .title(tooltip)
                 .css("cursor", "pointer")
-                .css("white-space", "nowrap");
+                .css("white-space", "nowrap")
+                .id("ddButton" + PickerClass.nextPickerClassButtonId++);
+
+            this._openerIds = ddButtonW.id();
 
             // ----create TEXT part of button ----
             var ddTextW = ddButtonW.append("span")
@@ -84,7 +90,10 @@ module beachPartyApp
             ddButtonW.element()
                 .addEventListener("click", (e) =>
                 {
-                    this.onPickerClick(e);        // //onOpenCallback(row.dataName, ddText, chevronW, e);
+                    AppUtils.callPanelOpen(e, (ee) =>
+                    {
+                        this.onPickerClick(e);        // //onOpenCallback(row.dataName, ddText, chevronW, e);
+                    })
                 });
 
             //---- set initial value ----
@@ -176,7 +185,7 @@ module beachPartyApp
 
             if (colItems)
             {
-                picker = new PopupMenuClass(this.application, this.container, null, "generalColPicker", colItems, (e, menu, textIndex, menuIndex) =>
+                picker = new PopupMenuClass(this.application, this.container, this._openerIds, "generalColPicker", colItems, (e, menu, textIndex, menuIndex) =>
                 {
                     var value = colItems[menuIndex];
                     if (value instanceof MenuItemData)
@@ -188,7 +197,17 @@ module beachPartyApp
                 }, undefined, undefined, verticalMargin, iconWidth, this._parentElem);
             }
 
-            picker.openWithoutPosition();
+            //---- open popup menu relative to chevron ----
+            var chevronW = vp.select(this._chevronElem);
+            var rcChevron = chevronW.getBounds(false);
+            var pickerElem = picker.getRootElem();
+            var rcPicker = vp.select(pickerElem).getBounds(false);
+
+            //---- right align picker with right of text/chevon box ----
+            var x = rcChevron.right + 4 - rcPicker.width;
+
+            //---- ENUM PICKERS seem to need this adjustment - does this break anything else? ----
+            picker.openWithoutOverlap(x + 2, rcChevron.bottom + 12);
         }
 
     }

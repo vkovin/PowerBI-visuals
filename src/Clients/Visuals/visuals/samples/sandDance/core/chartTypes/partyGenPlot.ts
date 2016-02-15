@@ -92,9 +92,15 @@ module beachParty
                 this._spaceDivider4.spaceType = SpaceType.random;
                 this._hideAxes = true;
             }
-            else if (chartType === "FlatSquarify")
+            else if (chartType == "FlatSquarify")
             {
-                var cellMargin = view.separationFactor() * dc.width / 1000;       // (dc.filteredRecordCount) ? (dc.width / Math.sqrt(dc.filteredRecordCount)) : 0;
+                var marginBase = dc.width / 5000;
+                if (this._facetHelper)
+                {
+                    marginBase *= 5;
+                }
+
+                var cellMargin = view.separationFactor() * marginBase;       // (dc.filteredRecordCount) ? (dc.width / Math.sqrt(dc.filteredRecordCount)) : 0;
 
                 this._spaceDivider4.spaceType = SpaceType.squarify;
                 this._spaceDivider4.cellMargin = cellMargin;
@@ -141,7 +147,15 @@ module beachParty
         {
             this._hideAxes = false;
 
-            var primaryCol = this._view.xMapping().colName;
+            //if (this._chartType == "FlatSquarify")
+            //{
+            //    var primaryCol = this._view.auxMapping().colName;
+            //}
+            //else
+            {
+                var primaryCol = this._view.xMapping().colName;
+            }
+
             var secondaryCol = this._view.yMapping().colName;
 
             this._spaceDivider1.xStat.colName = primaryCol;
@@ -306,23 +320,13 @@ module beachParty
             this._leafRcArray  = leafRcArray;
         }
 
-        layoutDataForRecord(i: number, dc: DrawContext)
+        layoutDataForRecord(i: number, dc: DrawContext, dr: bps.LayoutResult)
         {
             var nv = dc.nvData;
             var scales = dc.scales;
             var filter = dc.layoutFilterVector;
 
-            ////---- DEBUG ----
-            //if (i == 12956)
-            //{
-            //    var sorted = true;
-            //}
-            //else if (i == 14418)
-            //{
-            //    var sorted = false;
-            //}
-
-            if (filter && !filter[i])
+            if (!filter[i])
             {
                 //---- IN FILTER - give it the next rcArray ----
                 var index = this._nextInFilterIndex++;
@@ -335,43 +339,36 @@ module beachParty
                 var rc = vp.geom.createRect(0, 0, 1, 1);
             }
 
-            //var shapeType = this._shapeMaker.shapeType;
             var isRect = false;     // (shapeType == ShapeType.rectangle);
 
             if (this._fillCell)
             {
-                var width = rc.width / dc.userSizeFactor;       // dc.combinedSizeFactor;
-                var height = rc.height / dc.userSizeFactor;     // dc.combinedSizeFactor;
+                dr.width = rc.width / dc.userSizeFactor;       // dc.combinedSizeFactor;
+                dr.height = rc.height / dc.userSizeFactor;     // dc.combinedSizeFactor;
             }
             else
             {
-                var width = this._maxShapeSize * this.scaleColData(nv.size, i, scales.size, 1);
-                var height = width;
+                dr.width = this._maxShapeSize * this.scaleColData(nv.size, i, scales.size, 1);
+                dr.height = dr.width;
             }
 
-            var depth = dc.defaultDepth2d;
+            dr.depth = dc.defaultDepth2d;
 
             //---- center drawing within cell ----
-            var x = rc.left + rc.width / 2;
+            dr.x = rc.left + rc.width / 2;
 
             //---- work around facet vs. non-facet inconsistency in bottom/top usage ----
-            var y = Math.min(rc.bottom, rc.top) + rc.height / 2;      // rc.top
-            var z = 0;   
+            dr.y = Math.min(rc.bottom, rc.top) + rc.height / 2;      // rc.top
+            dr.z = 0;   
 
             if (isRect)
             {
-                x -= width / 2;
-                y -= height / 2;
+                dr.x -= dr.width / 2;
+                dr.y -= dr.height / 2;
             }
 
-            var colorIndex = this.scaleColData(nv.colorIndex, i, scales.colorIndex);
-            var imageIndex = this.scaleColData(nv.imageIndex, i, dc.scales.imageIndex);
-            var opacity = 1;
-
-            return {
-                x: x, y: y, z: z, width: width, height: height, depth: depth, colorIndex: colorIndex, opacity: opacity,
-                imageIndex: imageIndex, theta: 0,
-            };
+            dr.colorIndex = this.scaleColData(nv.colorIndex, i, scales.colorIndex);
+            dr.imageIndex = this.scaleColData(nv.imageIndex, i, dc.scales.imageIndex);
         }
     }
 }

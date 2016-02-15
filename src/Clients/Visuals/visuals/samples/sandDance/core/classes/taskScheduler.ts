@@ -1,5 +1,5 @@
 ﻿///-----------------------------------------------------------------------------------------------------------------
-/// taskScheduler.ts.  Copyright (c) 2015 Microsoft Corporation.
+/// taskScheduler.ts.  Copyright (c) 2016 Microsoft Corporation.
 ///     helper routines for managing async dependent tasks.
 ///-----------------------------------------------------------------------------------------------------------------
 

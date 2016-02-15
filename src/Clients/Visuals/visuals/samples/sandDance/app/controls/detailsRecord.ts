@@ -1,19 +1,19 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
-//    recordView.ts - control to view records one at a time, and to select the values.
+//  Copyright (c) 2016 - Microsoft Corporation.
+//    detailsRecord.ts - control to view records one at a time, and to select the values.
 //-------------------------------------------------------------------------------------
 
 /// <reference path="../_references.ts" />
 
 module beachPartyApp
 {
-    export class RecordViewClass extends beachParty.DataChangerClass implements IAppControl
+    export class DetailsRecordClass extends BaseAppControlClass
     {
         private application: AppClass;
 
-        _root: HTMLDivElement;
         _recordText: HTMLElement;
         _listElem: HTMLElement;
+        _buttonsElem: HTMLElement;
 
         _data: any[];                   // the set of records being displayed (selection set)
         _selectionIndex: number;        // index of current record in _data
@@ -28,6 +28,8 @@ module beachPartyApp
         _numSpreader: NumSpreaderClass;
         _lastPercent = {};
         //_rebuildTimer = null;
+        _isFirstRecordLayout = true;
+        _recordLayoutCount = 0;
 
         constructor(application: AppClass, panel: JsonPanelClass)
         {
@@ -41,9 +43,9 @@ module beachPartyApp
 
             vp.select(root)
                 .addClass("recordView")
-                // .css("background", "black")         // to catch all mouse events for setting focus
+                .css("background", "black")         // to catch all mouse events for setting focus
                 .attr("tabIndex", 0)                // allow it to accept focus
-                .attach("keydown", (e) => this.onKeyDown(e));
+                .attach("keydown", (e) => this.onKeyDown(e))
 
             this._selectionIndex = 0;
             this._primaryKey = -1;
@@ -51,41 +53,13 @@ module beachPartyApp
             //---- add control bar at top ----
             var rootW = vp.select(root);
 
-            var barW = rootW.append("div")
-                .addClass("rvControlBar")
-                .css("position", "relative")
-                .css("top", "-10px");
+            this.buildNavPanel(rootW);
 
-            var recordTextW = barW.append("span")
-                .addClass("rvRecordText");
-
-            barW.append("div")// img
-                .addClass("rvImgButton")
-                .addClass("prevPng")
-                .css("position", "relative")
-                .css("margin-left", "30px")
-                .css("top", "6px")
-                // .attr("src", "images/prev.png")
-                .title("View the next record")
-                .attach("click", (e) => this.goto(this._selectionIndex - 1));
-
-            barW.append("div")// img
-                .addClass("rvImgButton")
-                .addClass("nextPng")
-                .css("position", "relative")
-                .css("mnargin-left", "20px")
-                .css("top", "6px")
-                // .attr("src", "images/next.png")
-                .title("View the previous record")
-                .attach("click", (e) => this.goto(this._selectionIndex + 1));
-
-            this._recordText = recordTextW[0];
-
-            var maxPanelHeight = AppClass.maxPanelHeight;
+            var maxPanelHeight = this.application.maxPanelHeight;
             var maxListHeight = maxPanelHeight - 96;       // for controls above list
 
             //---- LIST of field/value/search (as table) ----
-            var listW = rootW.append("table")
+            var listW = rootW.append("div").append("table")
                 .addClass("rvList")
                 .attr("cellSpacing", "0")
                 .css("max-height", maxListHeight + "px")
@@ -102,7 +76,54 @@ module beachPartyApp
 
             this._listElem = listW[0];
 
+            //rootW.css("margin-bottom", "-20px");     // reduce spacing at bottom
+
             //this.rebuildColTable();
+        }
+
+        buildNavPanel(rootW: vp.dom.IWrapperOuter)
+        {
+            var barW = rootW.append("div")
+                .addClass("rvControlBar")
+                .css("position", "relative")
+                //.css("top", "-10px")
+
+            //---- use a table to support text-align correctly ----
+            var tableW = barW.append("table")
+                .css("width", "100%")
+
+            var rowW = tableW.append("tr")
+
+            //---- RECORD TEXT ----
+            var recordTextW = rowW.append("td").append("div")
+                .addClass("rvRecordText")
+
+            //---- BUTTONS----
+            var buttonsW = rowW.append("td")
+                .css("text-align", "right")
+
+            //---- LEFT button ----
+            buttonsW.append("img")
+                .addClass("rvImgButton")
+                .css("position", "relative")
+                //.css("margin-left", "30px")
+                //.css("top", "10px")
+                .attr("src", "images/prev.png")
+                .title("View the next record")
+                .attach("click", (e) => this.goto(this._selectionIndex - 1))
+
+            //---- RIGHT button ----
+            buttonsW.append("img")
+                .addClass("rvImgButton")
+                .css("position", "relative")
+                .css("mnargin-left", "30px")
+                //.css("top", "8px")
+                .attr("src", "images/next.png")
+                .title("View the previous record")
+                .attach("click", (e) => this.goto(this._selectionIndex + 1))
+
+            this._recordText = recordTextW[0];
+            this._buttonsElem = buttonsW[0];
         }
 
         getRecordIndex(ssIndex: number)
@@ -133,7 +154,7 @@ module beachPartyApp
 
         selectedColName(value?: string)
         {
-            if (arguments.length === 0)
+            if (arguments.length == 0)
             {
                 return this._selectedColName;
             }
@@ -144,22 +165,22 @@ module beachPartyApp
 
         onKeyDown(e)
         {
-            if (e.keyCode === vp.events.keyCodes.pageDown)
+            if (e.keyCode == vp.events.keyCodes.pageDown)
             {
                 this.goto(this._selectionIndex + 1);
                 vp.events.cancelEventBubble(e);
             }
-            else if (e.keyCode === vp.events.keyCodes.pageUp)
+            else if (e.keyCode == vp.events.keyCodes.pageUp)
             {
                 this.goto(this._selectionIndex - 1);
                 vp.events.cancelEventBubble(e);
             }
-            else if (e.keyCode === vp.events.keyCodes.home)
+            else if (e.keyCode == vp.events.keyCodes.home)
             {
                 this.goto(0);
                 vp.events.cancelEventBubble(e);
             }
-            else if (e.keyCode === vp.events.keyCodes.end)
+            else if (e.keyCode == vp.events.keyCodes.end)
             {
                 var count = (this._data) ? this._data.length : 0;
                 this.goto(count);
@@ -175,7 +196,7 @@ module beachPartyApp
         close()
         {
             vp.select(this._root)
-                .remove();
+                .remove()
         }
 
         getSelectedIndex(ri: number)
@@ -188,7 +209,7 @@ module beachPartyApp
                 {
                     var record = this._data[i];
                     var riValue = record["_primaryKey"];
-                    if (riValue === ri)
+                    if (riValue == ri)
                     {
                         ssIndex = i;
                         break;
@@ -202,7 +223,7 @@ module beachPartyApp
         /** this is called from jsonPanel holding this control, when app.selectedRecords changes. */
         selectedRecords(value?: any[])
         {
-            if (arguments.length === 0)
+            if (arguments.length == 0)
             {
                 return this._data;
             }
@@ -211,7 +232,7 @@ module beachPartyApp
 
             //---- try to maintain the current record (based on _primaryKey column value) ----
             this._selectionIndex = this.getSelectedIndex(this._primaryKey);
-            if (this._selectionIndex === -1)
+            if (this._selectionIndex == -1)
             {
                 this._selectionIndex = 0;
                 this._primaryKey = this.getRecordIndex(0);
@@ -232,7 +253,7 @@ module beachPartyApp
 
         colInfos(value?: bps.ColInfo[])
         {
-            if (arguments.length === 0)
+            if (arguments.length == 0)
             {
                 return this._colInfos;
             }
@@ -266,10 +287,18 @@ module beachPartyApp
             {
                 this.selectRowFromParent(rowElem);
 
-                this._selectedValue = vp.select(valueElem).text();
+                if (valueElem.rawValue !== undefined)
+                {
+                    //---- for numeric values, use the raw (unformatted) value ----
+                    this._selectedValue = valueElem.rawValue;
+                }
+                else
+                {
+                    this._selectedValue = vp.select(valueElem).text();
+                }
                 //this.onDataChanged("selectedValue");
 
-                this.application.doSearch("Details", this._selectedColName, this._selectedValue, null, bps.TextSearchType.exactMatch);
+                /*appClass.instance*/this.application.doSearch("Details", this._selectedColName, this._selectedValue, null, bps.TextSearchType.exactMatch);
             }
         }
 
@@ -289,7 +318,7 @@ module beachPartyApp
         rebuildColTable()
         {
             var listW = vp.select(this._listElem)
-                .clear();
+                .clear()
 
             this._rowElemByColName = {};
 
@@ -310,17 +339,17 @@ module beachPartyApp
 
                         if (!colName.startsWith("_"))
                         {
-                            var value = "";
+                            //var value = "";
 
                             var rowW = listW.append("tr")
-                                .addClass("recordViewRow");
+                                .addClass("recordViewRow")
 
                             //---- COLNAME td ----
-                            rowW.append("td")
+                            var colNameW = rowW.append("td")
                                 .addClass("rvColName")
                                 .text(colName)
                                 .title(tip)
-                                .attach("click", (e) => this.selectRowFromParent(e.target.parentElement));
+                                .attach("click", (e) => this.selectRowFromParent(e.target.parentElement))
 
                             //---- VALUE td ----
                             var valueElemW = rowW.append("td")
@@ -329,19 +358,18 @@ module beachPartyApp
 
                             valueElemW.append("span")
                                 .addClass("rvValue")
-                                .text(value);
+                                //.text(value)          // text is set in rebuildRecordValues()
 
                             //---- BING td ----
-                            var tdW = rowW.append("td");
+                            var tdW = rowW.append("td")
 
-                            var bingW = tdW.append("div") //img
+                            var bingW = tdW.append("img")
                                 .addClass("bingImg")
-                                .addClass("bing4")
                                 .attach("click", (e) => this.selectRowAndBingSearch(e))
-                                // .attr("src", "images/bing4.png")
+                                .attr("src", "images/bing4.png")
                                 .css("display", "none")
                                 .css("margin-top", "1px")
-                                .title("Search for this value in Bing");
+                                .title("Search for this value in Bing")
 
                             rowW[0].colIndex = c;
                             rowW[0].colName = colName;
@@ -363,11 +391,11 @@ module beachPartyApp
 
         openNumSpreader(rowParent, numSpreadParent)
         {
-            var bpsHelper = this.application._bpsHelper;
+            var bpsHelper = /*appClass.instance*/this.application._bpsHelper;
             var value = rowParent.valueElem.textContent;
 
             var initialPercent = this._lastPercent[this._selectedColName];
-            if (initialPercent === undefined || initialPercent === null)
+            if (initialPercent === undefined)
             {
                 initialPercent = 5;
             }
@@ -377,7 +405,7 @@ module beachPartyApp
                 (colName: string, minValue, maxValue, searchType, percent) =>
                 {
                     //this._isSearchFromNumSpreader = true;
-                    this.application.doSearch("Details", colName, minValue, maxValue, searchType);
+                    /*appClass.instance*/this.application.doSearch("Details", colName, minValue, maxValue, searchType);
                     //this._isSearchFromNumSpreader = false;
 
                     this._lastPercent[this._selectedColName] = percent;
@@ -405,17 +433,20 @@ module beachPartyApp
             var msg = "Record " + index + " (of " + recordCount + ")";
             var listDisp = "block";
 
-            if (recordCount === 0)
+            if (recordCount == 0)
             {
                 msg = "<no records selected>";
                 listDisp = "none";
             }
 
-            vp.select(this._recordText)
-                .text(msg);
+            //---- hide left/right buttons if no records are selected ----
+            vp.select(this._buttonsElem).css("display", (recordCount == 0) ? "none" : "");
 
-            vp.select(this._listElem)
-                .css("display", listDisp);
+            vp.select(this._recordText)
+                .text(msg)
+
+            var listW = vp.select(this._listElem)
+                .css("display", listDisp)
 
             var data = this._data;
             if (data && data.length)
@@ -439,27 +470,28 @@ module beachPartyApp
 
                             if (rowElem)
                             {
+                                var nameElem = rowElem.childNodes[0];
                                 var valueElem = rowElem.childNodes[1].firstChild;
                                 //var numSpreadParent = rowElem.childNodes[2];
                                 //var numSpreadElem = rowElem.childNodes[3].firstChild;
                                 var bingElem = rowElem.childNodes[2].firstChild;
 
-                                if (c === this._selectedColIndex)
+                                if (c == this._selectedColIndex)
                                 {
                                     vp.dom.css(rowElem, "background", "#444");
                                     //vp.dom.css(numSpreadElem, "display", "none")    //  (colType == "number") ? "" : "none");
 
                                     //---- show/hide BING element ----
-                                    vp.dom.css(bingElem, "display", (colType === "string") ? "" : "none");
+                                    vp.dom.css(bingElem, "display", (colType == "string") ? "" : "none");
 
-                                    if (colType === "number")
+                                    if (colType == "number")
                                     {
                                         this.openNumSpreader(rowElem, rowElem.childNodes[1]);
                                     }
                                 }
                                 else
                                 {
-                                    vp.dom.css(rowElem, "background", "none");
+                                    vp.dom.css(rowElem, "background", "none")
                                     //vp.dom.css(numSpreadElem, "display", "none");
                                     vp.dom.css(bingElem, "display", "none");
                                 }
@@ -467,13 +499,34 @@ module beachPartyApp
                                 //---- VALUE td ----
                                 vp.select(valueElem)
                                     .addClass("rvValue")
-                                    .text(value);
+                                    .text(value)
                             }
                         }
                     }
+
+                    var primaryKey = record["_primaryKey"];
+                    /*appClass.instance*/this.application._bpsHelper.setHoverItem(primaryKey);
                 }
             }
 
+            if (this._isFirstRecordLayout && recordCount > 0 && this._recordLayoutCount > 0)
+            {
+                this._isFirstRecordLayout = false;
+
+                //---- remove width/height to allow it to size on first record  ----
+                vp.select(this._panel.getRootElem(), ".recordView")
+                    .css("width", "")
+                    .css("height", "")
+
+                vp.select(this._panel.getRootElem(), ".rvList")
+                    .css("width", "")
+                    .css("height", "")
+
+                //---- lock down this size so panel doesn't resize with each record ----
+                this._panel.resizePanelToFitContent();
+            }
+
+            this._recordLayoutCount++;
         }
 
         selectRowAndBingSearch(e)
@@ -506,20 +559,20 @@ module beachPartyApp
             var rc = vp.select(parent).getBounds(false);
             var height = (rc.height) ? rc.height : 270;     // window.innerHeight * .8;
 
-            var hh = Math.max(25, height - 110);
+            var hh = Math.max(25, height - 100);
 
             //---- quick layout ----
             vp.select(this._listElem)
                 .css("max-height", "")
-                .css("height", hh + "px");
+                .css("height", hh + "px")
 
             vp.utils.debug("quickLayout: panelHeight=" + height + ", listElem height set=" + hh);
         }
 
     }
 
-    export function createRecordView(panel: JsonPanelClass, application: AppClass)
+    export function createRecordView(application: AppClass, panel: JsonPanelClass)
     {
-        return new RecordViewClass(application, panel);
+        return new DetailsRecordClass(application, panel);
     }
 }

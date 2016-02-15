@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    cmdMgr - manages the recording, dispatch, and playback of cmds.
 //-------------------------------------------------------------------------------------
 
@@ -168,11 +168,11 @@ module beachParty
 
                     this._appMgr.sendDataChangedToHost("roundTrip");
                 }
-                else if (cmd === "getsystemviewdata")
+                else if (cmd == "getsystemviewdata")
                 {
-                    var getSnapshot = boolParam;
+                    var snapshotType = bps.SnapshotType[+msgBlock.param];
                     var getRepro = boolParam2;
-                    this.getSystemViewData(msgBlock.requestId, getSnapshot, getRepro, view);;
+                    this.getSystemViewData(msgBlock.requestId, snapshotType, getRepro, view);
                 }
                 else if (cmd === "getengineevents")
                 {
@@ -181,13 +181,21 @@ module beachParty
 
                     this._appMgr.postMessageToParent({ msg: "getEngineEventsResponse", responseId: requestId, engineEvents: engineEvents });
                 }
-                else if (cmd === "getmemoryuse")
+                else if (cmd == "getscattershapesizeinpixels")
+                {
+                    var shapeSize = view.getChart().getScatterShapeSizeInPixels();
+                    var requestId = msgBlock.requestId;
+
+                    this._appMgr.postMessageToParent({ msg: "getscattershapesizeinpixels", responseId: requestId, shapeSize: shapeSize });
+                }
+                else if (cmd == "getmemoryuse")
                 {
                     var memObjs = <any>{};
 
                     //---- first build a map of major objects in engine ----
                     var chart = view.getChart();
 
+                    memObjs.bufferMgr = (chart) ? chart.getBufferMgr() : null;
                     memObjs.dataMgr = dataMgr;
                     memObjs.dataFrame = dataFrame;
                     memObjs.chart = chart;
@@ -196,44 +204,23 @@ module beachParty
                     memObjs.cmdMgr = this;
                     memObjs.windowMgr = this._windowMgr;
                     memObjs.traceMgr = TraceMgrClass.instance;
-                    memObjs.transformer = chart._transformer;
+                    memObjs.transformer = view.getTransformer();
                     memObjs.transformMgr = view.getTransformMgr();
                     memObjs.shareMgr = dataMgr.getShareMgr();
-                    memObjs.chartFrameHelper = chart._chartFrameHelper;
-                    memObjs.boundingBoxMgr = chart.getBoundingBoxMgr();
+                    memObjs.chartFrameHelper = (chart) ? chart._chartFrameHelper : null;
+                    memObjs.boundingBoxMgr = (chart) ? chart.getBoundingBoxMgr() : null;
 
                     var memUse = utils.getMemoryUse(memObjs);
                     var requestId = msgBlock.requestId;
 
                     this._appMgr.postMessageToParent({ msg: "getMemoryUseResponse", responseId: requestId, memUse: memUse });
                 }
-                else if (cmd === "setsystemviewdata")
+                else if (cmd == "setsystemviewdata")
                 {
                     var svd = <bps.SystemViewData>JSON.parse(msgBlock.param);
-                    var filterChanged = false;
                     var requestId = msgBlock.requestId;
 
-                    if (svd.filteredOutKeys)
-                    {
-                        dataMgr.setFilter(svd.filteredOutKeys);
-                        filterChanged = true;
-                    }
-
-                    if (svd.selectedKeys)
-                    {
-                        dataMgr.setSelectionDirect(svd.selectedKeys, "insight");
-                    }
-
-                    if (svd.worldTransform)
-                    {
-                        var matWorld = this.makeMatrix(svd.worldTransform);
-                        transformMgr.getTransformer().world(matWorld);
-                    }
-
-                    if (svd.rotationInertia)
-                    {
-                        transformMgr.inertia(svd.rotationInertia);
-                    }
+                    this.setSystemView(svd, dataMgr, transformMgr);
 
                     if (requestId)
                     {
@@ -268,38 +255,24 @@ module beachParty
                     var wdParams = <bps.WorkingDataParams>vp.utils.parseJsonIntoObj(msgBlock.param, new bps.WorkingDataParams());
 
                     console.log("wdParams: " + wdParams);
-// 
-                    this.loadDataFromServer(wdParams, msgBlock.requestId, view);
-                }
-                else if (cmd === "updatedataview")
-                {
-                    if (msgBlock.param2)
-                    {
-                        var wdParams = <bps.WorkingDataParams>vp.utils.parseJsonIntoObj(msgBlock.param2, new bps.Preload());
-                    }
-                    else
-                    {
-                        var wdParams = new bps.WorkingDataParams();
-                    }
 
-                    dataMgr.setDataDirect(msgBlock.param, wdParams);
-
-                    //---- send response ----
-                    var requestId = msgBlock.requestId;
-                    if (requestId)
-                    {
-                        this._appMgr.postMessageToParent({ msg: "setDataResponse", responseId: requestId });
-                    }
+                    this.loadDataFromServer(wdParams, msgBlock.requestId, view, null);
                 }
-                else if (cmd === "setdata")
+                else if (cmd == "addcolumnstodata")
                 {
-                    var data;
-                    
-                    if (typeof msgBlock.param === "object") {
-                        data = msgBlock.param;
-                    } else {
-                        data = JSON.parse(msgBlock.param);
-                    }
+                    var newCols = <bps.ColInfo[]>JSON.parse(msgBlock.param);
+                    var newData = <any[]>JSON.parse(msgBlock.param2);
+
+                    dataFrame.addColsToData(newCols, newData);
+
+                    var colInfos = dataMgr.getColInfos(true);
+                    var msgBlock12 = { msg: "colsAdded", responseId: msgBlock.requestId, colInfos: colInfos };
+                    this._appMgr.postMessageToParent(msgBlock12);
+
+                }
+                else if (cmd == "setdata")
+                {
+                    var data = JSON.parse(msgBlock.param);
 
                     if (msgBlock.param2)
                     {
@@ -317,6 +290,57 @@ module beachParty
                     if (requestId)
                     {
                         this._appMgr.postMessageToParent({ msg: "setDataResponse", responseId: requestId });
+                    }
+                }
+                else if (cmd == "setdataandsystemview")
+                {
+                    var data = JSON.parse(msgBlock.param);
+                    var dataFrameLoadedMsgBlock = null;
+                    var selectedChangedMsgBlock = null;
+                    var filterChangedMsgBlock = null;
+                    var appMgr = this._appMgr;
+
+                    if (msgBlock.param2)
+                    {
+                        var wdParams = <bps.WorkingDataParams>vp.utils.parseJsonIntoObj(msgBlock.param2, new bps.Preload());
+                    }
+
+                    if (data)
+                    {
+                        //---- SET DATA (from local cache) ----
+                        if (!wdParams)
+                        {
+                            var wdParams = new bps.WorkingDataParams();
+                        }
+
+                        dataMgr.setDataDirect(data, wdParams);
+
+                        //---- build msg block to describe data change ----
+                        dataFrameLoadedMsgBlock = appMgr.buildDataFrameLoadedMsgBlock(dataMgr);
+
+                        this.setDataAndSystemViewPost(msgBlock, dataFrameLoadedMsgBlock, selectedChangedMsgBlock,
+                            filterChangedMsgBlock, transformMgr, appMgr, dataMgr, cmd);
+                    }
+                    else if (wdParams)
+                    {
+                        //---- we will tell client, so supress normal notification mechanism to ----
+                        //---- prevent duplicate msg (and subsequent mistakes) ----
+                        wdParams.supressDataFrameLoadedMsgToClient = true;
+
+                        //---- LOAD DATA (known or URL) ----
+                        this.loadDataFromServer(wdParams, null, view, (e) =>
+                        {
+                            //---- build msg block to describe data change ----
+                            dataFrameLoadedMsgBlock = appMgr.buildDataFrameLoadedMsgBlock(dataMgr);
+
+                            this.setDataAndSystemViewPost(msgBlock, dataFrameLoadedMsgBlock, selectedChangedMsgBlock,
+                                filterChangedMsgBlock, transformMgr, appMgr, dataMgr, cmd);
+                        });
+                    }
+                    else
+                    {
+                        this.setDataAndSystemViewPost(msgBlock, dataFrameLoadedMsgBlock, selectedChangedMsgBlock,
+                            filterChangedMsgBlock, transformMgr, appMgr, dataMgr, cmd);
                     }
                 }
                 else if (cmd === "renderwebpagetopng")
@@ -371,34 +395,65 @@ module beachParty
                         view.buildNow(skipFilterSecondState);       //true);
                     }
                 }
-                else if (cmd === "rectselect")
+                else if (cmd == "rectselect")
                 {
-                    var rcBand = JSON.parse(msgBlock.param);
+                    var rcBandAdj = JSON.parse(msgBlock.param);
 
                     //---- adjust rcBand for offset of 10 in top ----
-                    var rcBandAdj = vp.geom.createRect(rcBand.left, rcBand.top, rcBand.width, rcBand.height);
+                    //var rcBandAdj = vp.geom.createRect(rcBand.left, rcBand.top, rcBand.width, rcBand.height);
 
                     view.hitTestRectWithSelect(rcBandAdj);
-                    this._appMgr.onRectSelection(rcBandAdj);                
+                    this._appMgr.onRectSelection(rcBandAdj);
                 }
                 else if (cmd === "setchartdebuginfo")
                 {
                     view.showChartDebugInfo(boolParam);
                 }
-                else if (cmd === "setlightingparams")
+                else if (cmd == "setclusteringparams")
                 {
-                    var lightParams = JSON.parse(msgBlock.param);
-                    view.lightingParams(lightParams);
+                    var cp = <bps.ClusteringParams>JSON.parse(msgBlock.param);
+                    view.clusteringParams(cp);
                 }
-                else if (cmd === "setchartframedata")
+                else if (cmd == "setflatparams")
+                {
+                    var fp = <bps.FlatParams>JSON.parse(msgBlock.param);
+                    view.flatParams(fp);
+                }
+                else if (cmd == "setspiralparams")
+                {
+                    var sp = <bps.SpiralParams>JSON.parse(msgBlock.param);
+                    view.spiralParams(sp);
+                }
+                else if (cmd == "setscatterparams")
+                {
+                    var sp2 = <bps.ScatterParams>JSON.parse(msgBlock.param);
+                    view.scatterParams(sp2);
+                }
+                else if (cmd == "setinstancingparams")
+                {
+                    var ip = <bps.InstancingParams>JSON.parse(msgBlock.param);
+                    view.instancingParams(ip);
+                }
+                else if (cmd == "setcustomparams")
+                {
+                    var cpp = <bps.CustomParams>JSON.parse(msgBlock.param);
+                    view.customParams(cpp);
+                }
+                else if (cmd == "datacacheparams")
+                {
+                    var dp = <bps.DataCacheParams>JSON.parse(msgBlock.param);
+                    this._appMgr.setDataCacheParams(dp);
+                    // appMgrClass.current.setDataCacheParams(dp);
+                }
+                else if (cmd == "setchartframedata")
                 {
                     var cfd = <bps.ChartFrameData>JSON.parse(msgBlock.param);
                     view.chartFrameData(cfd);
                 }
-                else if (cmd === "getrecordandbounds")
+                else if (cmd == "getrecordandbounds")
                 {
                     var primaryKey = msgBlock.param;
-                    var colNames = <string[]> JSON.parse(msgBlock.param2);
+                    var colNames = <string[]>((msgBlock.param2) ? JSON.parse(msgBlock.param2) : []);
                     var requestId = msgBlock.requestId;
 
                     var colValues = view.getColumnValues(colNames, primaryKey);
@@ -428,7 +483,7 @@ module beachParty
                 else if (cmd === "getmostcentralrecord")
                 {
                     var rcScreen = <ClientRect>JSON.parse(msgBlock.param);
-                    var colList = <string[]>JSON.parse(msgBlock.param2);
+                    var colList = <string[]> ((msgBlock.param2) ? JSON.parse(msgBlock.param2) : []);
                     var requestId = msgBlock.requestId;
 
                     var result = view.getMostCentralRecord(rcScreen, colList);
@@ -466,6 +521,10 @@ module beachParty
                 {
                     view.shapeImageName(msgBlock.param);
                 }
+                else if (cmd === "enableshapeimage")
+                {
+                    view.isShapeImageEnabled(boolParam);
+                }
                 else if (cmd === "settopercentoverride")
                 {
                     view.toPercentOverride(msgBlock.param);
@@ -478,10 +537,10 @@ module beachParty
                 {
                     view.is3dGridVisible(boolParam);
                 }
-                else if (cmd === "setimagemapping")
+                else if (cmd == "setshapemapping")
                 {
-                    var imageMapping = <bps.ImageMappingData>JSON.parse(msgBlock.param);
-                    view.imageMapping(imageMapping);
+                    var shapeMapping = <bps.ShapeMappingData>JSON.parse(msgBlock.param);
+                    view.shapeMapping(shapeMapping);
                 }
                 else if (cmd === "setfacetmapping")
                 {
@@ -520,18 +579,28 @@ module beachParty
                     var zMapping = <bps.MappingData> (msgBlock.param) ? JSON.parse(msgBlock.param) : new bps.MappingData(null);
                     view.zMapping(zMapping);
                 }
-                else if (cmd === "setdrawingprimitive")
+                else if (cmd == "setauxmapping")
+                {
+                    var auxMapping = <bps.MappingData>(msgBlock.param) ? JSON.parse(msgBlock.param) : new bps.MappingData(null);
+                    view.auxMapping(auxMapping);
+                }
+                else if (cmd == "setdrawingprimitive")
                 {
                     var drawPrim = <bps.DrawPrimitive>bps.DrawPrimitive[<string>msgBlock.param];
                     view.drawingPrimitive(drawPrim);
                 }
-                else if (cmd === "setorthocamera")
+                else if (cmd == "setorthocamera")
                 {
                     view.isOrthoCamera(boolParam);
                 }
-                else if (cmd === "setshowing3dwheel")
+                else if (cmd == "setshowing3dwheel")
                 {
-                    windowMgr.areTransformsEnabled(boolParam);
+                    windowMgr.showWheelDuringTransformMode(boolParam);
+                }
+                else if (cmd == "settransformmode")
+                {
+                    var tm = <bps.TransformMode>+msgBlock.param;
+                    windowMgr.transformMode(tm);
                 }
                 //else if (cmd == "setuselighting")
                 //{
@@ -554,10 +623,14 @@ module beachParty
                     var primaryKeys = dataFrame.getPrimaryKeys(vector, vectorType);
                     dataMgr.setSelectionDirect(primaryKeys, changeSource);
                 }
-                else if (cmd === "sethoverparams")
+                else if (cmd == "sethoverparams")
                 {
-                    var hoverParams = <bps.HoverParams> JSON.parse(msgBlock.param);
+                    var hoverParams = <bps.HoverParams>JSON.parse(msgBlock.param);
                     view.hoverParams(hoverParams);
+                }
+                else if (cmd == "sethoveritem")
+                {
+                    view.hoverPrimaryKey(msgBlock.param);
                 }
                 else if (cmd === "setselectionparams")
                 {
@@ -573,10 +646,6 @@ module beachParty
                 //{
                 //    view.areToolTipsEnabled(boolParam);
                 //}
-                else if (cmd === "setusetransforms")
-                {
-                    this._windowMgr.areTransformsEnabled(boolParam);
-                }
                 else if (cmd === "setwheelinertia")
                 {
                     transformMgr.isInertiaEnabled(boolParam);
@@ -585,20 +654,24 @@ module beachParty
                 {
                     dataMgr.sortData(msgBlock.param, utils.toBool(msgBlock.param2));
                 }
-                else if (cmd === "search")
+                else if (cmd == "search" || cmd == "searchex")
                 {
-                    //var colName = msgBlock.param;
-                    //var value = msgBlock.param2;
-                    //var maxValue = msgBlock.param3;
-                    //var searchType = <bps.TextSearchType>msgBlock.param4;
-                    //var action = <bps.SearchAction>msgBlock.param5;
-                    //var searchRawValues = msgBlock.param6;
+                    var spx = JSON.parse(msgBlock.param);
+                    var spList: bps.SearchParams[];
 
-                    var searchParams = <bps.SearchParams> JSON.parse(msgBlock.param);
+                    if (vp.utils.isArray(spx))
+                    {
+                        spList = <bps.SearchParams[]><any>spx;
+                    }
+                    else
+                    {
+                        spList = [<bps.SearchParams><any>spx];
+                    }
 
                     var requestId = msgBlock.requestId;
-                    var results = dataMgr.searchColValue(searchParams);
-                    if (searchParams.searchAction === bps.SearchAction.returnMatches)
+                    var results = dataMgr.runSearchQuery(spList);
+
+                    if (spList[0].searchAction == bps.SearchAction.returnMatches)
                     {
                         var rcPlot = view.getPlotBoundsInPixels();
 
@@ -606,14 +679,28 @@ module beachParty
                         this._appMgr.postMessageToParent(msgBlockBack);
                     }
                 }
-                else if (cmd === "applyhover")
+                else if (cmd == "getcolumnkeycounts")
+                {
+                    var colName = msgBlock.param;
+                    var sortByCount = boolParam2;
+                    var isDescendingSort = boolParam3;
+                    var maxKeys = +msgBlock.param4;
+
+                    var kcList = dataMgr.getColKeyCounts(colName, sortByCount, isDescendingSort, maxKeys);
+                    var requestId = msgBlock.requestId;
+
+                    var msgBlock14 = { msg: cmd, responseId: requestId, keyCountList: kcList };
+                    this._appMgr.postMessageToParent(msgBlock14);
+                }
+                else if (cmd == "applyhover")
                 {
                     var x = +msgBlock.param;
                     var y = +msgBlock.param2;
                     var returnRecord = boolParam3;
                     var columns = <string[]>JSON.parse(msgBlock.param4);
+                    var showHover = utils.toBool(msgBlock.param5);
 
-                    var primaryKey = view.applyHover({ x: x, y: y });
+                    var primaryKey = view.applyHover({ x: x, y: y }, showHover);
                     var requestId = msgBlock.requestId;
 
                     if (returnRecord)
@@ -632,9 +719,19 @@ module beachParty
                 {
                     dataMgr.clearSelection();
                 }
-                else if (cmd === "resetfilter")
+                else if (cmd == "resetfilter")
                 {
                     dataMgr.resetFilter();
+
+                    this.generalCallback(msgBlock.requestId, cmd);
+                }
+                else if (cmd == "datazoom")
+                {
+                    //---- reset the 3D transform and rotation inertia ----
+                    var rcZoom = JSON.parse(msgBlock.param);
+                    var zoomOut = boolParam2;
+
+                    windowMgr.zoomOnData(rcZoom, zoomOut);
                 }
                 else if (cmd === "resettransform")
                 {
@@ -643,18 +740,24 @@ module beachParty
 
                     windowMgr.resetStuff();
                 }
-                else if (cmd === "isolateselection")
+                else if (cmd == "isolateselection")
                 {
                     dataMgr.isolateSelection();
+
+                    this.generalCallback(msgBlock.requestId, cmd);
                 }
-                else if (cmd === "excludeselection")
+                else if (cmd == "excludeselection")
                 {
                     dataMgr.excludeSelection();
+
+                    this.generalCallback(msgBlock.requestId, cmd);
                 }
-                else if (cmd === "getdatavectors")
+                else if (cmd == "getdatavectors")
                 {
                     var names = JSON.parse(msgBlock.param);
-                    this.requestDataVectors(dataMgr, names);
+                    var asNumeric = boolParam2;
+
+                    this.requestDataVectors(dataMgr, names, asNumeric, msgBlock.requestId);
                 }
                 else if (cmd === "getvaluemap")
                 {
@@ -667,33 +770,115 @@ module beachParty
             }
         }
 
-        loadDataFromServer(wdParams: bps.WorkingDataParams, requestId: number, view: DataViewClass)
+        setDataAndSystemViewPost(msgBlock, dataFrameLoadedMsgBlock, selectedChangedMsgBlock,
+            filterChangedMsgBlock, transformMgr, appMgr, dataMgr, cmd)
+        {
+            if (msgBlock.param3)
+            {
+                //---- set SYSTEM VIEW data ----
+                var svd = <bps.SystemViewData>JSON.parse(msgBlock.param3);
+
+                var result2 = this.setSystemView(svd, dataMgr, transformMgr);
+
+                if (result2.selectionChanged)
+                {
+                    //---- build msg block to describe selection change ----
+                    selectedChangedMsgBlock = appMgr.buildSelectionChangedMsgBlock(dataMgr);
+                }
+
+                if (result2.filterChanged)
+                {
+                    //---- build msg block to describe filter change ----
+                    filterChangedMsgBlock = appMgr.buildFilterChangedMsgBlock(dataMgr);
+                }
+            }
+
+            //---- send response ----
+            var requestId = msgBlock.requestId;
+            if (requestId)
+            {
+                var multiMsgBlock = {
+                    msg: cmd, responseId: requestId,
+                    dataFrameLoadedMsgBlock: dataFrameLoadedMsgBlock,
+                    selectedChangedMsgBlock: selectedChangedMsgBlock,
+                    filterChangedMsgBlock: filterChangedMsgBlock
+                };
+
+                this._appMgr.postMessageToParent(multiMsgBlock);
+            }
+        }
+
+        setSystemView(svd: bps.SystemViewData, dataMgr: DataMgrClass, transformMgr: TransformMgrClass)
+        {
+            var filterChanged = false;
+            var selectionChanged = false;
+
+            if (svd.filteredOutKeys)
+            {
+                filterChanged = dataMgr.setFilter(svd.filteredOutKeys);
+            }
+
+            if (svd.selectedKeys)
+            {
+                selectionChanged = dataMgr.setSelectionDirect(svd.selectedKeys, "insight");
+            }
+
+            if (svd.worldTransform)
+            {
+                var matWorld = this.makeMatrix(svd.worldTransform);
+                transformMgr.getTransformer().world(matWorld);
+            }
+
+            if (svd.rotationInertia)
+            {
+                transformMgr.inertia(svd.rotationInertia);
+            }
+
+            return { selectionChanged: selectionChanged, filterChanged: filterChanged };
+        }
+
+        generalCallback(requestId: string, cmd: string)
+        {
+            var msgBlock = { msg: cmd, responseId: requestId };
+
+            this._appMgr.postMessageToParent(msgBlock);
+        }
+
+        loadDataFromServer(wdParams: bps.WorkingDataParams, requestId: number, view: DataViewClass, callback)
         {
             var dataMgr = this._appMgr._dataMgr;
 
-            if (!wdParams)
+            if (!wdParams || dataMgr.isFileLoaded(wdParams))
             {
-                // ---- file is already loaded; process the properties sync ----
-                this.loadDataPost(wdParams, requestId, view);
+                //---- file is already loaded; process the properties sync ----
+                this.loadDataPost(wdParams, requestId, view, callback);
             }
             else
             {
-            //     //---- load file and then process the properties ----
-                dataMgr.openPreloadAsync(view._dataFrame._vectorsByName, wdParams, (df: DataFrameClass) =>
+                //---- load file and then process the properties ----
+                dataMgr.openPreloadAsync(wdParams, (df: DataFrameClass) =>
                 {
-                    this.loadDataPost(wdParams, requestId, view);
+                    //---- don't draw twice; let client request the only draw in this sequence ----
+                    view.cancelRquestedDraw();
+
+                    this.loadDataPost(wdParams, requestId, view, callback);
                 });
             }
         }
 
-        loadDataPost(wdParams: bps.WorkingDataParams, requestId: number, view: DataViewClass)
+        loadDataPost(wdParams: bps.WorkingDataParams, requestId: number, view: DataViewClass, callback)
         {
-            //---- don't draw twice; let client request the only draw in this sequence ----
-            view.cancelRquestedDraw();
+            if (requestId)
+            {
+                //---- post result back to client ----
+                var msgBlock = { msg: "BpsInsightLoaded", responseId: requestId };
+                this._appMgr.postMessageToParent(msgBlock);
+            }
 
-            //---- post result back to client ----
-            var msgBlock = { msg: "BpsInsightLoaded", responseId: requestId };
-            this._appMgr.postMessageToParent(msgBlock);
+            if (callback)
+            {
+                callback();
+            }
         }
 
         makeMatrix(fakeArray: Float32Array)
@@ -708,7 +893,7 @@ module beachParty
             return mat;
         }
 
-        getSystemViewData(requestId: number, getSnapshot: boolean, getRepro: boolean, view: DataViewClass)
+        getSystemViewData(requestId: number, snapshotType: string, getRepro: boolean, view: DataViewClass)
         {
             var svd = new bps.SystemViewData();
             var dataMgr = this._appMgr._dataMgr;
@@ -729,12 +914,9 @@ module beachParty
             }
 
             //---- did client request a copy of the plot image? ----
-            if (getSnapshot)
+            if (snapshotType != "none")
             {
-                var canvas = <HTMLCanvasElement>vp.select(this.container, ".canvas3d")[0];
-
-                //---- PNG is messed up for IE/Chrome/Firefox; JPEG seems to work correctly ----
-                svd.imageAsUrl = canvas.toDataURL("image/jpeg", 1);
+                svd.imageAsUrl = view.takeSnapshot(snapshotType == "plot");
             }
 
             //---- post result IMMEDIATELY back to client ----
@@ -743,19 +925,19 @@ module beachParty
             this._appMgr.postMessageToParent(msgBlock);
         }
 
-        requestDataVectors(dataMgr: DataMgrClass, names: string[])
+        requestDataVectors(dataMgr: DataMgrClass, names: string[], asNumeric: boolean, requestId: string)
         {
             var nv = <any>{};
-            var dataFrame = dataMgr.getDataFrame();
 
             for (var i = 0; i < names.length; i++)
             {
                 var name = names[i];
-                nv[name] = dataFrame.getVector(name, false);
+
+                nv[name] = dataMgr.getFilteredInVector(name, asNumeric);
             }
 
             var param = JSON.stringify(nv);
-            var msgBlock = { msg: "dataVectors", vectors: param };
+            var msgBlock = { msg: "dataVectors", vectors: param, responseId: requestId };
 
             this._appMgr.postMessageToParent(msgBlock);
         }

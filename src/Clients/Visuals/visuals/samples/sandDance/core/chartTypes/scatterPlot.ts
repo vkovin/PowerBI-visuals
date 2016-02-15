@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    scatterPlot.ts - builds a 2D scatter plot of sand shapes.
 //-------------------------------------------------------------------------------------
 
@@ -70,22 +70,36 @@ module beachParty
         modifyXYScales(dc: DrawContext, halfShapeSize?: number)
         {
             //---- add spacing on both sides of X and Y scales to keep shapes within the borders ----
-            if (!halfShapeSize)
+            if (halfShapeSize != undefined)
             {
-                halfShapeSize = (dc.maxShapeSize / 2);      //  * dc.transformSizeFactor;       //  dc.combinedSizeFactor;
+                var xExpand = halfShapeSize;
+                var yExpand = halfShapeSize;
+            }
+            else
+            {
+                var sp = this._view.scatterParams();
+                var shapeSize = dc.maxShapeSize;
 
-                //---- this is not yet correct, but getting closer ----
-                //halfShapeSize *= .8;           .3;
+                if (sp)
+                {
+                    var xExpand = sp.percentExpandX * shapeSize;
+                    var yExpand = sp.percentExpandY * shapeSize;
+                }
+                else
+                {
+                    var xExpand = .5 * shapeSize;
+                    var yExpand = .5 * shapeSize;
+                }
             }
 
             //---- note: expandSpace() for scale in specifed in range units (world units, in this case) ----
             dc.scales.x
-                .expandSpace(halfShapeSize);
+                .expandSpace(xExpand);
 
             dc.scales.y
-                .expandSpace(halfShapeSize);
+                .expandSpace(yExpand);
 
-            this._halfSizeSize = halfShapeSize;
+            this._halfSizeSize = xExpand;
         }
 
         preLayoutLoop(dc: DrawContext)
@@ -100,27 +114,21 @@ module beachParty
         }
 
         /** "bufferIndex" in the 0-based indexed into the sorted data buffers. */
-        layoutDataForRecord(bufferIndex: number, dc: DrawContext)
+        layoutDataForRecord(bufferIndex: number, dc: DrawContext, dr: bps.LayoutResult)
         {
             var nv = dc.nvData;
             var scales = dc.scales;
 
-            var x = this.scaleColData(nv.x, bufferIndex, scales.x);
-            var y = this.scaleColData(nv.y, bufferIndex, scales.y);
-            var z = this._z;         // for correct rotation about Y axis
+            dr.x = this.scaleColData(nv.x, bufferIndex, scales.x);
+            dr.y = this.scaleColData(nv.y, bufferIndex, scales.y);
+            dr.z = this._z;         // for correct rotation about Y axis
 
-            var width = this._maxShapeSize * this.scaleColData(nv.size, bufferIndex, scales.size, 1);
-            var height = width;
-            var depth = dc.defaultDepth2d   ;
+            dr.width = this._maxShapeSize * this.scaleColData(nv.size, bufferIndex, scales.size, 1);
+            dr.height = dr.width;
+            dr.depth = dc.defaultDepth2d   
 
-            var colorIndex = this.scaleColData(nv.colorIndex, bufferIndex, scales.colorIndex);
-            var imageIndex = this.scaleColData(nv.imageIndex, bufferIndex, dc.scales.imageIndex);
-            var opacity = 1;
-
-            return {
-                x: x, y: y, z: z, width: width, height: height, depth: depth, colorIndex: colorIndex, opacity: opacity,
-                imageIndex: imageIndex, theta: 0,
-            };
+            dr.colorIndex = this.scaleColData(nv.colorIndex, bufferIndex, scales.colorIndex);
+            dr.imageIndex = this.scaleColData(nv.imageIndex, bufferIndex, dc.scales.imageIndex);
         }
     }
 }

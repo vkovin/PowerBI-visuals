@@ -113,7 +113,6 @@ module bps
                 //---- batch this cmd ----
                 if (!this._batchTimer)
                 {
-                    //this._engineIsLoaded = true;//TODO: remove this line.
                     //---- don't start the time until the chart has been loaded ----
                     if (this._engineIsLoaded)
                     {

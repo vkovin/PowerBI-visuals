@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    transformMgr.ts - manages changes to 3D transform of chart.
 //-------------------------------------------------------------------------------------
 
@@ -354,9 +354,9 @@ module beachParty
         //}
 
         /** Scale the camera by a relative amount. */
-        scaleCameraRelative(factor: number, mousePos)
+        scaleCameraRelative(factor: number, mousePos, isMousePosInWorldUnits?: boolean)
         {
-            if (factor !== 0)
+            if (factor != 0)
             {
                 var doIt = true;
 
@@ -373,7 +373,7 @@ module beachParty
                 {
                     this._currentScale *= factor;
 
-                    this._transformer.scaleMatrix(factor, mousePos);
+                    this._transformer.scaleMatrix(factor, mousePos, isMousePosInWorldUnits);
                 }
 
                 //vp.utils.debug("scaleCameraRelative: newScale=" + this._currentScale);

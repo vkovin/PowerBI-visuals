@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    chartUtils.ts - common functions used by some of the chart classes
 //-------------------------------------------------------------------------------------
 
@@ -9,6 +9,42 @@ module beachParty
 {
     export class ChartUtils
     {
+        static setFilteredMinMaxBreak(md: bps.MappingData, layoutFilterVector, nv: NumericVector)
+        {
+            //---- filter data using layoutFilterVector ----
+            var newVector = [];
+            var values = nv.values;
+
+            for (var i = 0; i < values.length; i++)
+            {
+                if (!layoutFilterVector[i])
+                {
+                    newVector.push(values[i]);
+                }
+            }
+
+            var keys = null;
+            var min = null;
+            var max = null;
+
+            if (nv.colType == "string")
+            {
+                keys = newVector.distinct();     
+                min = 0;
+                max = keys.length - 1;
+            }
+            else
+            {
+                keys = null;
+                min = newVector.min();
+                max = newVector.max();
+            }
+
+            md.minBreakFacet = min;
+            md.maxBreakFacet = max;
+        }
+
+
         static computeBestCountFactor(maxCount: number, shapesPerRow: number)
         {
             var breakCount = null;
@@ -196,9 +232,7 @@ module beachParty
         static adjustScaleForBin(scale: vp.scales.baseScale, binResults: BinResult)
         {
             var scaleType = scale.scaleType();
-            var bins = binResults && binResults.bins
-                ? binResults.bins
-                : [];
+            var bins = binResults.bins;
 
             //---- build an array of the bin names for the xScale labels ----
             var binNames = [];
@@ -207,18 +241,20 @@ module beachParty
                 binNames[i] = bins[i].name;
             }
 
-            if (scaleType === vp.scales.ScaleType.categoryIndex || scaleType === vp.scales.ScaleType.categoryKey)
+            if (scaleType == vp.scales.ScaleType.categoryIndex || scaleType == vp.scales.ScaleType.categoryKey)
             {
                 scale.categoryKeys(binNames);
             }
             else
             {
+                //---- looks at each bin value and determines the current sort order ----
                 var order = this.getOrderOfBins(<BinInfoNum[]>bins);
 
+                //---- order = 1 means ascending order ----
                 //---- order = 0 means bins are in random order, according to their conseq. min/max values ----
                 //---- order = -1 means descending order ----
 
-                var useCategoryForBins = (order !== 1);
+                var useCategoryForBins = (order != 1);
 
                 if (useCategoryForBins)
                 {
@@ -226,20 +262,18 @@ module beachParty
 
                     scale = vp.scales.createCategoryIndex()
                         .categoryKeys(binNames)
-                        .range(oldScale.rangeMin(), oldScale.rangeMax());
+                        .range(oldScale.rangeMin(), oldScale.rangeMax())
 
                     //---- enable scaling by keyIndex (default is key value) ----
                     //scale.scale = scale.categoryScale;
+
+                    binResults.useCategoryForBins = true;
                 }
                 else
                 {
                     var breakValues = [];
                     var labels = [];
-
-                    var numBins = binResults && (<BinResultNum>binResults).bins
-                        ? binResults.bins
-                        : [];
-
+                    var numBins = (<BinResultNum>binResults).bins;
                     var anyScale = <any>scale;
 
                     for (var b = 0; b < numBins.length; b++)
@@ -249,7 +283,7 @@ module beachParty
                         breakValues.push(numBin.min);
                         labels.push(numBin.minLabel);
 
-                        if (b === bins.length - 1)
+                        if (b == bins.length - 1)
                         {
                             breakValues.push(numBin.max);
                             labels.push(numBin.maxLabel);
@@ -259,7 +293,7 @@ module beachParty
                     anyScale._breaks = breakValues;
                     anyScale._labels = labels;
 
-                    if (scaleType === vp.scales.ScaleType.dateTime && !anyScale._formatter)
+                    if (scaleType == vp.scales.ScaleType.dateTime && !anyScale._formatter)
                     {
                         //---- use the formatString returned by the binning function ----
                         var formatString = binResults && (<BinResultNum>binResults).dateFormatString

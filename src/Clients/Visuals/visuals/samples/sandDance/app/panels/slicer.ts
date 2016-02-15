@@ -13,7 +13,11 @@
 module sandDance {
     export module panels {
         export var slicer: any = {
-            title: "Slicer", tip: "View and select values of a column", sizeable: true,
+            title: "Slicer",
+            tip: "View and select values of a column",
+            sizeable: true,
+            //autoClose: true,
+
             rows:
             [
                 { fillClient: true, id: "slicer", control: "beachPartyApp.createSlicer", dataName: "slicerData" },

@@ -8,7 +8,7 @@
 module beachParty
 {
     /// Note: dataFrame does NOT change the original data, but it cache numeric vectors on-demand for each column. 
-    export class DataFrameClass 
+    export class DataFrameClass extends DataChangerClass
     {
         ctr = "dataFrameClass";
 
@@ -21,21 +21,25 @@ module beachParty
         private _wdParams: bps.WorkingDataParams;
         private _sortKey: string = "none";        // colName + "up" or "down"
         private _pkToVectorIndex = {};
+        private _loader: DataLoaderClass;
+        private _recordCount = 0;
+        private _currentSortKeys: any[];
 
         //---- a cache of vectors that have been converted to all numeric values ----
         private _numericVectorsCache: { [name: string]: NumericVector };
 
-        constructor(vectorsByName: { [name: string]: any[] }, names?: string[], colTypes?: string[])
+        constructor(vectorsByName: { [name: string]: any[] }, names?: string[], colTypes?: string[], recordCount?: number)
         {
+            super();
+
             this._vectorsByName = vectorsByName;
-            this._names = names;
             this._colTypes = colTypes;
 
             this._numericVectorsCache = {};
 
             if (!names)
             {
-                this._names = vp.utils.keys(vectorsByName);
+                names = vp.utils.keys(vectorsByName);
             }
 
             //---- ensure all colTypes are set ----
@@ -44,21 +48,76 @@ module beachParty
                 colTypes = [];
             }
 
-            for (var i = 0; i < this._names.length; i++)
+            for (var i = 0; i < names.length; i++)
             {
                 var colType = (i < colTypes.length) ? colTypes[i] : null;
 
                 if (!colType)
                 {
-                    var name = this._names[i];
+                    var name = names[i];
                     var vector = vectorsByName[name];
-                    var colType = vp.data.getDataType(vector);
 
-                    colTypes[i] = colType;
+                    if (vector)
+                    {
+                        var colType = vp.data.getDataType(vector);
+                        colTypes[i] = colType;
+                    }
                 }
             }
 
+            var firstName = names[0];
+            var firstVector = vectorsByName[firstName];
+            if (firstVector)
+            {
+                recordCount = firstVector.length;
+            }
+
+            this._names = names;
             this._colTypes = colTypes;
+            this._recordCount = recordCount;
+        }
+
+        getColTypes()
+        {
+            return this._colTypes;
+        }
+
+        /** ensure the specified columns are loaded and the other columns are closed (to minimize memory use). */
+        loadColumns(colList: string[])
+        {
+            if (this._loader)
+            {
+                //---- close unneeded columns ----
+                for (var i = 0; i < this._names.length; i++)
+                {
+                    var name = this._names[i];
+                    if (systemColNames.indexOf(name) == -1)
+                    {
+                        if (colList.indexOf(name) == -1)
+                        {
+                            this._vectorsByName[name] = null;
+                            this._numericVectorsCache[name] = null;
+                        }
+                    }
+                }
+
+                //---- gather list of columns that we need to load ----
+                var loadList = [];
+
+                for (var i = 0; i < colList.length; i++)
+                {
+                    var name = colList[i];
+                    if (this._vectorsByName[name] == null)
+                    {
+                        loadList.push(name);
+                    }
+                }
+
+                if (loadList.length)
+                {
+                    this._loader.loadColumns(this._vectorsByName, loadList);
+                }
+            }
         }
 
         rebuildPrimaryKeyIndex()
@@ -122,34 +181,28 @@ module beachParty
             {
                 //---- must build one from values in column ----
                 var vector = this.getVector(colName, false);
-
+                var groups = vector.groupBy();
                 vm = [];
 
-                if (vector && vector.groupBy) {
-                    var groups = vector.groupBy();
+                for (var i = 0; i < groups.length; i++)
+                {
+                    var group = groups[i];
+                    var vme = new bps.ValueMapEntry();
 
-                    for (var i = 0; i < groups.length; i++)
-                    {
-                        var group = groups[i];
-                        var vme = new bps.ValueMapEntry();
+                    vme.originalValue = group.key;
+                    vme.valueCount = group.values.length;
 
-                        vme.originalValue = group.key;
-                        vme.valueCount = group.values.length;
-
-                        vm.push(vme);
-                    }
+                    vm.push(vme);
                 }
             }
 
-            if (vm) {
-                //---- valueMap: sort in descending order ----
-                vm = vm.orderByNum((e) => {return e.valueCount; });
-                vm.reverse();
+            //---- valueMap: sort in descending order ----
+            vm = vm.orderByNum((e) => {return e.valueCount });
+            vm.reverse();
 
-                if (maxRows !== undefined)
-                {
-                    vm = vm.slice(0, maxRows);
-                }
+            if (maxRows != undefined)
+            {
+                vm = vm.slice(0, maxRows);
             }
 
             return vm;
@@ -278,21 +331,28 @@ module beachParty
             return newExp;
         }
 
+        isColLoaded(colName: string)
+        {
+            return (this._vectorsByName[colName] != null);
+        }
+
         /** uses "exp" as a JavaScript expression to build a new vector of values. */
         buildCalcVector(exp: string)
         {
             var newVector = [];
-            var recordCount = this.getRecordCount();
+            var recordCount = this._recordCount;
 
             //----  convert exp from string to func ----
             var expAdj = this.addRecordKeywordToColumnNames(exp);
             var expFunc = null;
 
-            var strMakeFunc = "expFunc = function(record) { return " + expAdj + ";}" ;
+            var strMakeFunc = "expFunc = function(record) { return " + expAdj + ";}" 
 
-            /* tslint:disable */
-            eval(strMakeFunc);
-            /* tslint:enable */
+            /// TOD: write a function validator that ensures only columns, standard function, and constants are
+            /// used in an expression to create a safeEval().
+
+            //eval(strMakeFunc);      // create function from user expression
+            throw "calc fields not currenly supported";
 
             for (var i = 0; i < recordCount; i++)
             {
@@ -309,21 +369,23 @@ module beachParty
         /** applies a filter and produces a new dataFrame object. */
         applyPrefilter(exp: string)
         {
-            var recordCount = this.getRecordCount();
+            var recordCount = this._recordCount;
             var indexes = [];       // the records to keep
 
             //----  convert exp from string to func ----
             var expAdj = this.addRecordKeywordToColumnNames(exp);
             var expFunc = null;
-            /* tslint:disable */
-            eval("expFunc = function(record) { return " + expAdj + ";}");
-            /* tslint:enable */
+            //eval("expFunc = function(record) { return " + expAdj + ";}");   // create function from exp
+
+            throw "preload filter not currently supported";
+
             for (var i = 0; i < recordCount; i++)
             {
                 var record = this.getRecordByVectorIndex(i);
+                var _primaryKey = i;
 
                 var value = expFunc(record);
-                if (value !== true)
+                if (value != true)
                 {
                     indexes.push(i);
                 }
@@ -359,7 +421,12 @@ module beachParty
                     if (this.isValidFieldName(exp))
                     {
                         //---- just a field rename ----
-                        var vector = this.getVector(exp, false).slice(0);  // copy vector
+                        var vector = <any[]> null;
+                        if (this.isColLoaded(exp))
+                        {
+                            vector = this.getVector(exp, false);
+                            vector = vector.slice(0);  // copy vector
+                        }
                         newMap[newName] = vector;
                     }
                     else
@@ -371,8 +438,16 @@ module beachParty
                 }
                 else
                 {
+                    //---- use original field name ----
+                    var fldType = fld.fieldType;
+
                     //---- use the specified named column ----
-                    var vector = this.getVector(newName, false).slice(0);  // copy vector
+                    var vector = <any[]> null;
+                    if (this.isColLoaded(newName))
+                    {
+                        vector = this.getVector(newName, false);
+                        vector = vector.slice(0);  // copy vector
+                    }
                     newMap[newName] = vector;
 
                 }
@@ -389,7 +464,7 @@ module beachParty
                     colTypes.push(typeName);
                 }
 
-                if (fld.valueMap && fld.valueMap.length)
+                if (vector && fld.valueMap && fld.valueMap.length)
                 {
                     this.applyValueMap(fld, vector);
                 }
@@ -397,6 +472,16 @@ module beachParty
 
             var df = new DataFrameClass(newMap, newNames, colTypes);
             return df;
+        }
+
+        loader(value?: DataLoaderClass)
+        {
+            if (arguments.length == 0)
+            {
+                return this._loader;
+            }
+
+            this._loader = value;
         }
 
         applyValueMap(fld: bps.PreloadField, vector: any[])
@@ -435,7 +520,7 @@ module beachParty
 
             //---- NOTE: we can move this onto a background worker thread if/when needed----
 
-            var sortAsNumbers = (colType !== "string");
+            var sortAsNumbers = (colType != "string");
 
             if (!colName)
             {
@@ -447,13 +532,13 @@ module beachParty
             //---- extract keys to sort ----
             var keys = [];
 
-            if (colType === "string")
+            if (colType == "string")
             {
-                var vector = this.getVector(colName, false);
+                var vector = <any>this.getVector(colName, false);
             }
             else
             {
-                var vector = <any[]>this.getNumericVector(colName, false).values;
+                var vector = <any>this.getNumericVector(colName, false).values;
             }
 
             if (!vector)
@@ -491,11 +576,11 @@ module beachParty
                 vp.utils.debug("calling STRING sort: colName=" + colName + ", ascending=" + ascending + ", length=" + keys.length);
                 if (ascending)
                 {
-                    keys.sort(function (a, b) { return (a.key < b.key) ? -1 : ((a.key === b.key) ? 0 : 1); });
+                    keys.sort(function (a, b) { return (a.key < b.key) ? -1 : ((a.key == b.key) ? 0 : 1); });
                 }
                 else
                 {
-                    keys.sort(function (b, a) { return (a.key < b.key) ? -1 : ((a.key === b.key) ? 0 : 1); });
+                    keys.sort(function (b, a) { return (a.key < b.key) ? -1 : ((a.key == b.key) ? 0 : 1); });
                 }
             }
             //vp.utils.debug("sort returned");
@@ -505,10 +590,16 @@ module beachParty
             for (var i = 0; i < this._names.length; i++)
             {
                 var name = this._names[i];
-                var vector = this._vectorsByName[name];
+                var vector = <any>this._vectorsByName[name];
 
-                this.reorderVectorInPlace(vector, keys);
+                if (vector)
+                {
+                    this.reorderVectorInPlace(vector, keys);
+                }
             }
+
+            //---- save sort keys for colsOnDemand ----
+            this._currentSortKeys = keys;
 
             this.rebuildPrimaryKeyIndex();
 
@@ -541,26 +632,55 @@ module beachParty
             }
         }
 
-        addColumn(name, colType: string, vector?: any[])
+        addColsToData(newInfos: bps.ColInfo[], newVectors: any[])
         {
-            //---- don't add new name if already present ----
-            if (this._names.indexOf(name) === -1)
+            for (var i = 0; i < newInfos.length; i++)
             {
-                if (!vector)
-                {
-                    //---- supply default vector of all zeros ----
-                    var count = this.getRecordCount();
-                    vector = [];
+                var ci = newInfos[i];
+                var vector = newVectors[i];
 
-                    for (var i = 0; i < count; i++)
-                    {
-                        vector[i] = 0;
-                    }
-                }
+                this.addColumn(ci, vector, false);
+            }
 
+            this.onDataChanged("colInfos");
+        }
+
+        addColumn(ci: bps.ColInfo, vector?: any[], notify = true)
+        {
+            var name = ci.name;
+            var index = this._names.indexOf(name);
+
+            if (index == -1)
+            {
+                //---- a new column name ----
+                index = this._names.length;
                 this._names.push(name);
-                this._colTypes.push(colType);
-                this._vectorsByName[name] = vector;
+            }
+            else
+            {
+                //---- invalidate cache for this column, since we are adding new data ----
+                this._numericVectorsCache[name] = null;
+            }
+
+            if (!vector)
+            {
+                //---- supply default vector of all zeros ----
+                var count = this._recordCount;
+                vector = [];
+
+                for (var i = 0; i < count; i++)
+                {
+                    vector[i] = 0;
+                }
+            }
+
+            //---- add colType and vector ----
+            this._colTypes[index] = ci.colType;
+            this._vectorsByName[name] = vector;
+
+            if (notify)
+            {
+                this.onDataChanged("colInfos");
             }
         }
 
@@ -613,17 +733,7 @@ module beachParty
 
         getRecordCount()
         {
-            var count = 0;
-
-            if (this._names.length > 0)
-            {
-                var firstName = this._names[0];
-                var firstVector = this._vectorsByName[firstName];
-
-                count = firstVector.length;
-            }
-
-            return count;
+            return this._recordCount;
         }
 
         getPreload(): bps.WorkingDataParams
@@ -647,22 +757,29 @@ module beachParty
         {
             var record: any = null;
 
-            if (recordIndex >= 0 && recordIndex <= this.getRecordCount())
+            if (this._loader)
             {
-                record = {};
-
-                if (!colNames)
+                record = this._loader.getRecord(recordIndex, colNames);
+            }
+            else
+            {
+                if (recordIndex >= 0 && recordIndex <= this._recordCount)
                 {
-                    colNames = this._names;
-                }
+                    record = {};
 
-                for (var c = 0; c < colNames.length; c++)
-                {
-                    var colName = colNames[c];
-                    var vector = this._vectorsByName[colName];
-                    var value = vector[recordIndex];
+                    if (!colNames)
+                    {
+                        colNames = this._names;
+                    }
 
-                    record[colName] = value;
+                    for (var c = 0; c < colNames.length; c++)
+                    {
+                        var colName = colNames[c];
+                        var vector = this._vectorsByName[colName];
+                        var value = vector[recordIndex];
+
+                        record[colName] = value;
+                    }
                 }
             }
 
@@ -676,7 +793,7 @@ module beachParty
             if (this._names && this._names.length)
             {
                 var names = this._names;
-                var count = this.getRecordCount();
+                var count = this._recordCount;
 
                 if (maxRecords)
                 {
@@ -717,7 +834,29 @@ module beachParty
                 this._numericVectorsCache[name] = null;
             }
 
-            return this._vectorsByName[name];
+            var vector = this._vectorsByName[name];
+            if (!vector && this._loader)
+            {
+                //---- get column on demand ----
+                this._loader.loadColumns(this._vectorsByName, [name]);
+                vector = this._vectorsByName[name];
+
+                //---- apply value map if present ----
+                var fld = this.getFieldData(name);
+
+                if (fld && fld.valueMap && fld.valueMap.length)
+                {
+                    this.applyValueMap(fld, vector);
+                }
+
+                //---- sort if sortKeys active ----
+                if (this._currentSortKeys)
+                {
+                    this.reorderVectorInPlace(vector, this._currentSortKeys);
+                }
+            }
+
+            return vector;
         }
 
         getFieldData(colName: string)
@@ -732,7 +871,7 @@ module beachParty
                     for (var i = 0; i < fields.length; i++)
                     {
                         var field = fields[i];
-                        if (field.name === colName)
+                        if (field.name == colName)
                         {
                             pf = field;
                             break;
@@ -742,6 +881,11 @@ module beachParty
             }
 
             return pf;
+        }
+
+        invalidateCache(colName: string)
+        {
+            this._numericVectorsCache[colName] = null;
         }
 
         /** gets the named vector in its NUMERIC form. */
@@ -791,11 +935,10 @@ module beachParty
 
         copyData(recordIndexes?: number[])     
         {
-            var df = new DataFrameClass( {} );
 
-            df._names = vp.utils.copyArray(this._names);
-            df._colTypes = vp.utils.copyArray(this._colTypes);
-            df._vectorsByName = {};
+            var names = vp.utils.copyArray(this._names);
+            var colTypes = vp.utils.copyArray(this._colTypes);
+            var vectorsByName: { [name:string]: any[] } = {};
 
             for (var v = 0; v < this._names.length; v++)
             {
@@ -814,9 +957,10 @@ module beachParty
                     var newVector = <any[]> vp.utils.copyArray(vector);
                 }
 
-                df._vectorsByName[name] = newVector;
+                vectorsByName[name] = newVector;
             }
 
+            var df = new DataFrameClass(vectorsByName, names, colTypes, this._recordCount);
             return df;
         }
 
@@ -839,19 +983,22 @@ module beachParty
         getPrimaryKeys(vector: any[], vectorType: bps.VectorType)
         {
             var keys = [];
+            var pkVector = this.getVector(primaryKeyName, false);
 
-            if (vectorType === bps.VectorType.sortOrder)
+            if (vectorType == bps.VectorType.sortOrder)
             {
                 for (var ri = 0; ri < vector.length; ri++)
                 {
                     var value = vector[ri];
                     if (value)
                     {
+                        var key = pkVector[ri];
+
                         keys.push(value);
                     }
                 }
             }
-            else if (vectorType === bps.VectorType.primaryKeyList)
+            else if (vectorType == bps.VectorType.primaryKeyList)
             {
                 keys = vector;
             }
@@ -883,29 +1030,48 @@ module beachParty
         public static buildNumericColFromVector(name: string, colData: any[], colType: string, forceNumeric?: boolean,
             forceCategory?: boolean, allKeys?: string[], wdParams?: bps.WorkingDataParams)
         {
-            var newData = [];       // (count) ? new Float32Array(count) : null;
-
+            var count = (colData) ? colData.length: 0;
+            var newData = new Float32Array(count);
             var numericVector = new NumericVector(newData, name, colType);
 
             if (colData && colData.length)
             {
-                if (colType === "number")
+                if (colType == "number")
                 {
                     //---- transfer NUMBER values, converting strings to parsed numbers ----
                     for (var i = 0; i < colData.length; i++)
                     {
-                        var value: any = +colData[i];
-                        newData[i] = value;
+                        /// number represenations:
+                        ///     valid number string --> normal numbers
+                        ///     blanks  --> NaN 
+                        ///     invalid number string --> NaN
+
+                        //var value: any = +colData[i];
+                        var strValue = colData[i];
+
+                        if (strValue === "")
+                        {
+                            //---- NA (missing) value ----
+                            var numValue = NaN;
+                        }
+                        else
+                        {
+                            //---- NUMBER or STRING value ----
+                            var numValue = +strValue;
+                        }
+
+                        newData[i] = numValue;
                     }
                 }
-                else if (colType === "date")
+                else if (colType == "date")
                 {
                     //---- transfer DATE values, converting strings to parsed date numbers and date objects to date numbers ----
                     for (var i = 0; i < colData.length; i++)
                     {
                         var value = colData[i];
 
-                        if (typeof value === "string")
+                        //---- BLANK and NON-DATE strings are converted here to NaN's ----
+                        if (typeof value == "string")
                         {
                             value = Date.parse(value);
                         }
@@ -939,12 +1105,15 @@ module beachParty
                     }
                     else
                     {
+                        throw "Error: cannot put string values into a NumericVector";
                         //---- transfer STRING values without change ----
-                        for (var i = 0; i < colData.length; i++)
-                        {
-                            var value: any = colData[i];
-                            newData[i] = value;
-                        }
+                        //newData = [];           // cannot put strings into float32Array
+
+                        //for (var i = 0; i < colData.length; i++)
+                        //{
+                        //    var value: any = colData[i];
+                        //    newData[i] = value;
+                        //}
                     }
                 }
             }
@@ -1027,16 +1196,16 @@ module beachParty
             var result = null;
             var statType = statInfo.statType;
 
-            if (statType === StatType.count)
+            if (statType == StatType.count)
             {
-                result = this.getRecordCount();
+                result = this._recordCount;
             }
             else
             {
                 var colName = statInfo.colName;
                 var statTransform = statInfo.colValueTransform;
 
-                var statName = (statType !== StatType.none) ? StatType[statType] : "sum";
+                var statName = (statType != StatType.none) ? StatType[statType] : "sum";
 
                 var aggregator = vp.data.createAggregator(statName);
                 aggregator.init();

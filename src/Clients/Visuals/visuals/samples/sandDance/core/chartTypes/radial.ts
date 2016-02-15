@@ -49,7 +49,7 @@ module beachParty
             this._maxShapeSize = dc.maxShapeSize;
         }
 
-        layoutDataForRecord(i: number, dc: DrawContext)
+        layoutDataForRecord(i: number, dc: DrawContext, dr: bps.LayoutResult)
         {
             var nv = dc.nvData;
             var scales = dc.scales;
@@ -57,22 +57,16 @@ module beachParty
             var theta = -(Math.PI / 2 + this.scaleColData(nv.x, i, scales.x));
             var radius = this.scaleColData(nv.y, i, scales.y);
 
-            var x = this._cx + radius * Math.cos(theta);
-            var y = this._cy + radius * Math.sin(theta);
-            var z = 0;      
+            dr.x = this._cx + radius * Math.cos(theta);
+            dr.y = this._cy + radius * Math.sin(theta);
+            dr.z = 0;      
 
-            var width = this._maxShapeSize * this.scaleColData(nv.size, i, scales.size, 1);
-            var height = width;
-            var depth = dc.defaultDepth2d   ;
+            dr.width = this._maxShapeSize * this.scaleColData(nv.size, i, scales.size, 1);
+            dr.height = dr.width;
+            dr.depth = dc.defaultDepth2d   
 
-            var colorIndex = this.scaleColData(nv.colorIndex, i, scales.colorIndex);
-            var imageIndex = this.scaleColData(nv.imageIndex, i, dc.scales.imageIndex);
-            var opacity = 1;
-
-            return {
-                x: x, y: y, z: z, width: width, height: height, depth: depth, colorIndex: colorIndex, opacity: opacity,
-                imageIndex: imageIndex, theta: 0,
-            };
+            dr.colorIndex = this.scaleColData(nv.colorIndex, i, scales.colorIndex);
+            dr.imageIndex = this.scaleColData(nv.imageIndex, i, dc.scales.imageIndex);
         }
     }
 }

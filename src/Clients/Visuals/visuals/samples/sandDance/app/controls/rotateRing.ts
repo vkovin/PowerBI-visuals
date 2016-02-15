@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    rotateRing.ts - displays a slowly pulsing ring in the 3D rotation area, in center of plot area. 
 //-------------------------------------------------------------------------------------
 
@@ -13,7 +13,7 @@ module beachPartyApp
         private container: HTMLElement;
 
         _root: HTMLDivElement;
-        _fullOpacity = "1";//"1"
+        _fullOpacity = "1";
         //_radius = 0;               // size of 3D transform center
         _pulseInterval = 5000;
         _pulseTimer = null;

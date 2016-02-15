@@ -6,12 +6,13 @@
 module sandDance {
     export module panels {
         export var yPanel: any = {
+            title: "Y axis",
+            autoClose: true,
             rows:
             [
                 { numAdjuster: "Bins:", tip: "Specifies the number of bins to create", min: 2, max: 999, roundValues: true, spreadLow: true, dataName: "yBins" },
-                { colPickerList: "", tip: "Sets column used to map the Y axis", dataName: "changeYMapping" },
+                { colPickerList: "", tip: "Sets column used to map the Y axis", dataName: "yColumn", closeAction: true, mapToDefaultCol: true },
             ]
         };
-
     }
 }

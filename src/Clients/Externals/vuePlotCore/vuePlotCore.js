@@ -51,30 +51,30 @@ var vp;
     function arrayCount(colNameOrCallback) {
         var count = 0;
         if (vp.utils.isFunction(colNameOrCallback)) {
+            //---- CALLBACK specified - return value must return fuzzy TRUE to be counted ----
             for (var i = 0; i < this.length; i++) {
                 var value = this[i];
                 value = colNameOrCallback(value, i);
-                value = parseFloat(value);
-                if (isFinite(value)) {
+                if (+value) {
                     count++;
                 }
             }
         }
         else if (vp.utils.isString(colNameOrCallback)) {
+            //---- COLUMN NAME specified - count all defined values of the column ----
             var colName = colNameOrCallback;
             for (var i = 0; i < this.length; i++) {
                 var value = this[i][colName];
-                value = parseFloat(value);
-                if (isFinite(value)) {
+                if (value !== undefined) {
                     count++;
                 }
             }
         }
         else {
+            //---- count all defined value ----
             for (var i = 0; i < this.length; i++) {
                 var value = this[i];
-                value = parseFloat(value);
-                if (isFinite(value)) {
+                if (value !== undefined) {
                     count++;
                 }
             }
@@ -148,12 +148,15 @@ var vp;
     ///     snippet: var aray = [-5, 3, 0, 3];
     ///     snippet: var myMax = arrayMin(Math.abs);        // myMax will be set to 0
     ///     returns: the item in the array for which calling func produces the smallest value
-    function arrayMin(itemFunc) {
+    function arrayMin(itemFunc, includeNans) {
         //var startTime = new Date().getTime();
         var mm = Number.MAX_VALUE;
         if (vp.utils.isFunction(itemFunc)) {
             for (var i = 0; i < this.length; i++) {
                 var value = itemFunc(this[i]);
+                if (!includeNans && isNaN(value)) {
+                    continue;
+                }
                 // the below code is 2x faster than: mm = Math.max(mm, aray[i]);
                 if (value < mm) {
                     mm = value;
@@ -162,11 +165,14 @@ var vp;
         }
         else {
             //---- this top code is about 10x as fast as the botoom, but crashes with length around 150K ----
-            if (this.length <= maxStackSize) {
+            if (includeNans && this.length <= maxStackSize) {
                 mm = Math.min.apply(Math, this);
             }
             else {
                 for (var i = 0; i < this.length; i++) {
+                    if (!includeNans && isNaN(this[i])) {
+                        continue;
+                    }
                     // the below code is 2x faster than: mm = Math.min(mm, aray[i]);
                     if (this[i] < mm) {
                         mm = this[i];
@@ -177,12 +183,15 @@ var vp;
         //var elapsedMs = new Date().getTime() - startTime;
         return mm;
     }
-    function arrayMax(itemFunc) {
+    function arrayMax(itemFunc, includeNans) {
         //var startTime = new Date().getTime();
         var mm = -Number.MAX_VALUE; // do NOT use Number.MIN_VALUE 
         if (vp.utils.isFunction(itemFunc)) {
             for (var i = 0; i < this.length; i++) {
                 var value = itemFunc(this[i]);
+                if (!includeNans && isNaN(value)) {
+                    continue;
+                }
                 // the below code is 2x faster than: mm = Math.max(mm, aray[i]);
                 if (value > mm) {
                     mm = value;
@@ -191,11 +200,14 @@ var vp;
         }
         else {
             //---- this top code is about 10x as fast as the botoom, but crashes with length around 150K ----
-            if (this.length <= maxStackSize) {
+            if (includeNans && this.length <= maxStackSize) {
                 mm = Math.max.apply(Math, this);
             }
             else {
                 for (var i = 0; i < this.length; i++) {
+                    if (!includeNans && isNaN(this[i])) {
+                        continue;
+                    }
                     // the below code is 2x faster than: mm = Math.max(mm, aray[i]);
                     if (this[i] > mm) {
                         mm = this[i];
@@ -283,8 +295,17 @@ var vp;
         var newArray = this.slice(0, count);
         return newArray;
     }
+    //---- copy current true or pseudo array to new array ----
     function arrayToArray() {
-        var newArray = this.slice(0, this.length);
+        if (this.slice) {
+            var newArray = this.slice(0, this.length);
+        }
+        else {
+            var newArray = [];
+            for (var i = 0; i < this.length; i++) {
+                newArray[i] = this[i];
+            }
+        }
         return newArray;
     }
     /// signature:  arrayRemove(item)
@@ -1912,7 +1933,7 @@ var vp;
         animation.createAnimation = createAnimation;
         function requestAnimationFrame(callback) {
             var timer = null;
-            if (window.requestAnimationFrame) {
+            if (window && window.requestAnimationFrame) {
                 window.requestAnimationFrame(callback);
                 timer = -1;
             }
@@ -1923,7 +1944,7 @@ var vp;
         }
         animation.requestAnimationFrame = requestAnimationFrame;
         function cancelAnimationFrame(timer) {
-            if (window.cancelAnimationFrame) {
+            if (window && window.cancelAnimationFrame) {
                 window.cancelAnimationFrame(timer);
             }
             else {
@@ -2590,7 +2611,8 @@ var vp;
                     var shapeId = vp.dom.shapeId(uelem);
                     if (shapeId == seriesIndex) {
                         vp.dom.animate(uelem, 0); // turn off animation for this shape
-                        callBack(uelem, uelem.dataItem, uelem.dataIndex, true);
+                        var isLastNew = (i == this._enterShapes.length - 1);
+                        callBack(uelem, uelem.dataItem, uelem.dataIndex, true, isLastNew);
                         shapesTouched.push(uelem);
                     }
                 }
@@ -3894,7 +3916,7 @@ var vp;
                 }
                 return sz;
             };
-            axisBaseClass.prototype.horizontalTickShader = function (element, record, index, isNew, xStart, length, y) {
+            axisBaseClass.prototype.horizontalTickShader = function (element, record, index, isNew, xStart, length, y, isLastNew) {
                 if (this._ticksOnInside) {
                     vp.select(element)
                         .hLine(xStart, xStart + length, y, this._isCrisp);
@@ -3904,10 +3926,10 @@ var vp;
                         .hLine(xStart - length, xStart, y, this._isCrisp);
                 }
                 if (this._onShade) {
-                    this._onShade(element, record, index, isNew);
+                    this._onShade(element, record, index, isNew, isLastNew);
                 }
             };
-            axisBaseClass.prototype.horizontalTickBoxShader = function (element, record, index, isNew, xStart, length, yRecord) {
+            axisBaseClass.prototype.horizontalTickBoxShader = function (element, record, index, isNew, xStart, length, yRecord, isLastNew) {
                 var y = yRecord.tickOffset;
                 if (index > 0) {
                     var lastY = this._lastYTickBox;
@@ -3918,11 +3940,11 @@ var vp;
                         .bounds(x, y + spacer, length, height, this._isCrisp);
                 }
                 if (this._onShade) {
-                    this._onShade(element, record, index, isNew);
+                    this._onShade(element, record, index, isNew, isLastNew);
                 }
                 this._lastYTickBox = y;
             };
-            axisBaseClass.prototype.verticalTickShader = function (element, record, index, isNew, yStart, length, x) {
+            axisBaseClass.prototype.verticalTickShader = function (element, record, index, isNew, yStart, length, x, isLastNew) {
                 if (this._ticksOnInside) {
                     vp.select(element)
                         .vLine(yStart, yStart + length, x, this._isCrisp);
@@ -3932,10 +3954,10 @@ var vp;
                         .vLine(yStart - length, yStart, x, this._isCrisp);
                 }
                 if (this._onShade) {
-                    this._onShade(element, record, index, isNew);
+                    this._onShade(element, record, index, isNew, isLastNew);
                 }
             };
-            axisBaseClass.prototype.verticalTickBoxShader = function (element, record, index, isNew, yStart, length, xRecord) {
+            axisBaseClass.prototype.verticalTickBoxShader = function (element, record, index, isNew, yStart, length, xRecord, isLastNew) {
                 var x = xRecord.tickOffset;
                 if (index > 0) {
                     var lastX = this._lastXTickBox;
@@ -3946,7 +3968,7 @@ var vp;
                         .bounds(lastX + spacer, y, width, length, this._isCrisp);
                 }
                 if (this._onShade) {
-                    this._onShade(element, record, index, isNew);
+                    this._onShade(element, record, index, isNew, isLastNew);
                 }
                 this._lastXTickBox = x;
             };
@@ -4147,7 +4169,7 @@ var vp;
                 }
                 return availPixelsPerLabel;
             };
-            axisBaseClass.prototype.shadeTextLabel = function (index, element, cx, cy, text, hAlign, vAlign, alignTo, returnWidth, availPixelsPerLabel) {
+            axisBaseClass.prototype.shadeTextLabel = function (index, element, cx, cy, text, hAlign, vAlign, alignTo, returnWidth, availPixelsPerLabel, isLastNew) {
                 var fullText = text;
                 var actualLabelRotation = this._actualLabelRotation;
                 var fakeLabel = this._fakeLabel;
@@ -4940,37 +4962,37 @@ var vp;
                 //---- create AXIS TICKS ----
                 this._tickMark = vp.marks.createLineMark(root, "vpxAxisTick")
                     .keyFunc(chartFrame.indexKeyFunc)
-                    .onShade(function (element, record, index, isNew) {
-                    _this.verticalTickShader(element, record, index, isNew, _this._offset, -_this._drawingParams.tickLength, record);
+                    .onShade(function (element, record, index, isNew, context, transition, isLastNew) {
+                    _this.verticalTickShader(element, record, index, isNew, _this._offset, -_this._drawingParams.tickLength, record, isLastNew);
                 });
                 //---- create AXIS TICK BOXES ----
                 this._tickBox = vp.marks.createRectangleMark(root, "vpxAxisTickBox")
                     .keyFunc(chartFrame.indexKeyFunc)
-                    .onShade(function (element, record, index, isNew) {
-                    _this.verticalTickBoxShader(element, record, index, isNew, _this._offset, _this._drawingParams.tickLength, record);
+                    .onShade(function (element, record, index, isNew, context, transition, isLastNew) {
+                    _this.verticalTickBoxShader(element, record, index, isNew, _this._offset, _this._drawingParams.tickLength, record, isLastNew);
                 });
                 //---- create MINOR TICKS  ----
                 this._minorTickMark = vp.marks.createLineMark(root, "vpxAxisMinorTick")
                     .keyFunc(chartFrame.indexKeyFunc)
-                    .onShade(function (element, record, index, isNew) {
-                    _this.verticalTickShader(element, record, index, isNew, _this._offset, -_this._drawingParams.minorTickLength, record);
+                    .onShade(function (element, record, index, isNew, context, transition, isLastNew) {
+                    _this.verticalTickShader(element, record, index, isNew, _this._offset, -_this._drawingParams.minorTickLength, record, isLastNew);
                 });
                 //---- create AXIS LABELS ----
                 this._labelMark = vp.marks.createTextMark(root, "vpxAxisLabel")
                     .keyFunc(chartFrame.labelKeyFunc)
-                    .onShade(function (element, record, index, isNew) {
+                    .onShade(function (element, record, index, isNew, context, transition, isLastNew) {
                     var cx = record.offset;
                     var cy = _this._offset;
                     var availPixelsPerLabel = _this.getAvailablePixelsPerLabelForTruncation(_this._actualLabelRotation);
-                    var myHeight = _this.shadeTextLabel(index, element, cx, cy, record.label, "middle", "top", vp.chartFrame.LabelLocation.top, false, availPixelsPerLabel);
+                    var myHeight = _this.shadeTextLabel(index, element, cx, cy, record.label, "middle", "top", vp.chartFrame.LabelLocation.top, false, availPixelsPerLabel, isLastNew);
                     _this._maxTextHeight = Math.max(_this._maxTextHeight, myHeight);
                     if (_this._onShade) {
-                        _this._onShade(element, record, index, isNew);
+                        _this._onShade(element, record, index, isNew, isLastNew);
                     }
                 });
                 //---- create NAME ----
                 this._nameMark = vp.marks.createTextMark(root, "vpxAxisName")
-                    .onShade(function (element, record, index, isNew) {
+                    .onShade(function (element, record, index, isNew, isLastNew) {
                     /// General Note: when laying out elements with animations potentially active,
                     /// we cannot rely on system calls to determine position - we have to track 
                     /// x,y positions manually.  This is because calls like "elem.attr("x", 34)" don't change
@@ -4998,7 +5020,7 @@ var vp;
                         _this._maxTextHeight = szLabel.height;
                     }
                     if (_this._onShade) {
-                        _this._onShade(element, record, index, isNew);
+                        _this._onShade(element, record, index, isNew, isLastNew);
                     }
                 });
             }
@@ -5072,23 +5094,23 @@ var vp;
                     .isXVisible(xData != null)
                     .isYVisible(yData != null);
                 this._titleMark = vp.marks.createTextMark(uRootElem, "vpxAxisTitle")
-                    .onShade(function (element, record, index, isNew) {
+                    .onShade(function (element, record, index, isNew, isLastNew) {
                     _this.shadeTextMark(10, 10, "start", element, _this._title.text);
                     if (_this._onShade) {
-                        _this._onShade(element, record, index, isNew);
+                        _this._onShade(element, record, index, isNew, isLastNew);
                     }
                 });
                 this._subTitleMark = vp.marks.createTextMark(uRootElem, "vpxAxisSubTitle")
-                    .onShade(function (element, record, index, isNew) {
+                    .onShade(function (element, record, index, isNew, isLastNew) {
                     _this.shadeTextMark(10, 30, "start", element, _this._subTitle.text);
                     if (_this._onShade) {
-                        _this._onShade(element, record, index, isNew);
+                        _this._onShade(element, record, index, isNew, isLastNew);
                     }
                 });
                 //---- PLACEHOLDER for now ----
                 this._legend = vp.chartFrame.createRightAxis(uRootElem, null, null, true);
                 this._boxMark = vp.marks.createRectangleMark(uRootElem, "vpxAxisBox")
-                    .onShade(function (element, record, index, isNew) {
+                    .onShade(function (element, record, index, isNew, isLastNew) {
                     var rc = _this._rcPlot;
                     vp.select(element)
                         .bounds(rc.left, rc.top, rc.width, rc.height, _this._isCrisp);
@@ -5838,7 +5860,7 @@ var vp;
                 //---- create AXIS LABELS ----
                 this._labelMark = vp.marks.createTextMark(root, "vpxAxisLabel")
                     .keyFunc(chartFrame.labelKeyFunc)
-                    .onShade(function (element, record, index, isNew) {
+                    .onShade(function (element, record, index, isNew, context, transition, isLastNew) {
                     //---- szMaxText has been set to the largest measured label width/height ----
                     var textWidth = _this._szMaxText.width;
                     var availPixelsPerLabel = _this.getAvailablePixelsPerLabelForTruncation(_this._actualLabelRotation);
@@ -5849,29 +5871,29 @@ var vp;
                     textWidth = _this.rotatedSize(_this._actualLabelRotation, textWidth, _this._szMaxText.height);
                     var xRight = _this._offset + textWidth;
                     var cy = record.offset;
-                    var myWidth = _this.shadeTextLabel(index, element, xRight, cy, record.label, "end", "middle", chartFrame.LabelLocation.right, true, availPixelsPerLabel);
+                    var myWidth = _this.shadeTextLabel(index, element, xRight, cy, record.label, "end", "middle", chartFrame.LabelLocation.right, true, availPixelsPerLabel, isLastNew);
                     _this._maxTextWidth = Math.max(_this._maxTextWidth, myWidth);
                     if (_this._onShade) {
-                        _this._onShade(element, record, index, isNew);
+                        _this._onShade(element, record, index, isNew, isLastNew);
                     }
                 });
                 //---- create AXIS TICKS  ----
                 this._tickMark = vp.marks.createLineMark(root, "vpxAxisTick")
                     .keyFunc(chartFrame.indexKeyFunc)
-                    .onShade(function (element, record, index, isNew) {
-                    _this.horizontalTickShader(element, record, index, isNew, _this._offset, _this._drawingParams.tickLength, record);
+                    .onShade(function (element, record, index, isNew, context, transition, isLastNew) {
+                    _this.horizontalTickShader(element, record, index, isNew, _this._offset, _this._drawingParams.tickLength, record, isLastNew);
                 });
                 //---- create AXIS TICK BOXES  ----
                 this._tickBox = vp.marks.createRectangleMark(root, "vpxAxisTickBox")
                     .keyFunc(chartFrame.indexKeyFunc)
-                    .onShade(function (element, record, index, isNew) {
-                    _this.horizontalTickBoxShader(element, record, index, isNew, _this._offset, _this._drawingParams.tickLength, record);
+                    .onShade(function (element, record, index, isNew, context, transition, isLastNew) {
+                    _this.horizontalTickBoxShader(element, record, index, isNew, _this._offset, _this._drawingParams.tickLength, record, isLastNew);
                 });
                 //---- create MINOR TICKS  ----
                 this._minorTickMark = vp.marks.createLineMark(root, "vpxAxisMinorTick")
                     .keyFunc(chartFrame.indexKeyFunc)
-                    .onShade(function (element, record, index, isNew) {
-                    _this.horizontalTickShader(element, record, index, isNew, _this._offset, _this._drawingParams.minorTickLength, record);
+                    .onShade(function (element, record, index, isNew, context, transition, isLastNew) {
+                    _this.horizontalTickShader(element, record, index, isNew, _this._offset, _this._drawingParams.minorTickLength, record, isLastNew);
                 });
                 //---- create AXIS LINE ----
                 this._axisLineMark = vp.marks.createLineMark(root, "vpxAxisLine")
@@ -5958,32 +5980,32 @@ var vp;
                 //---- create AXIS TICKS ----
                 this._tickMark = vp.marks.createLineMark(root, "vpxAxisTick")
                     .keyFunc(chartFrame.indexKeyFunc)
-                    .onShade(function (element, record, index, isNew) {
-                    _this.horizontalTickShader(element, record, index, isNew, _this._offset, -_this._drawingParams.tickLength, record);
+                    .onShade(function (element, record, index, isNew, context, transition, isLastNew) {
+                    _this.horizontalTickShader(element, record, index, isNew, _this._offset, -_this._drawingParams.tickLength, record, isLastNew);
                 });
                 //---- create AXIS TICK BOXES  ----
                 this._tickBox = vp.marks.createRectangleMark(root, "vpxAxisTickBox")
                     .keyFunc(chartFrame.indexKeyFunc)
-                    .onShade(function (element, record, index, isNew) {
-                    _this.horizontalTickBoxShader(element, record, index, isNew, _this._offset, _this._drawingParams.tickLength, record);
+                    .onShade(function (element, record, index, isNew, context, transition, isLastNew) {
+                    _this.horizontalTickBoxShader(element, record, index, isNew, _this._offset, _this._drawingParams.tickLength, record, isLastNew);
                 });
                 //---- create MINOR TICKS  ----
                 this._minorTickMark = vp.marks.createLineMark(root, "vpxAxisMinorTick")
-                    .onShade(function (element, record, index, isNew) {
-                    _this.horizontalTickShader(element, record, index, isNew, _this._offset, -_this._drawingParams.minorTickLength, record);
+                    .onShade(function (element, record, index, isNew, context, transition, isLastNew) {
+                    _this.horizontalTickShader(element, record, index, isNew, _this._offset, -_this._drawingParams.minorTickLength, record, isLastNew);
                 });
                 //---- create AXIS LABELS ----
                 this._labelMark = vp.marks.createTextMark(root, "vpxAxisLabel")
                     .keyFunc(chartFrame.labelKeyFunc)
-                    .onShade(function (element, record, index, isNew) {
+                    .onShade(function (element, record, index, isNew, context, transition, isLastNew) {
                     //---- szMaxText has been set to the largest measured label width/height ----
                     var xLeft = _this._offset;
                     var cy = record.offset - 1; // small adjustment for asthetics
                     var availPixelsPerLabel = _this.getAvailablePixelsPerLabelForTruncation(_this._actualLabelRotation);
-                    var myWidth = _this.shadeTextLabel(index, element, xLeft, cy, record.label, "start", "middle", vp.chartFrame.LabelLocation.left, true, availPixelsPerLabel);
+                    var myWidth = _this.shadeTextLabel(index, element, xLeft, cy, record.label, "start", "middle", vp.chartFrame.LabelLocation.left, true, availPixelsPerLabel, isLastNew);
                     _this._maxTextWidth = Math.max(_this._maxTextWidth, myWidth);
                     if (_this._onShade) {
-                        _this._onShade(element, record, index, isNew);
+                        _this._onShade(element, record, index, isNew, isLastNew);
                     }
                 });
                 //---- create AXIS NAME ----
@@ -6103,7 +6125,7 @@ var vp;
                 //---- create AXIS LABELS ----
                 this._labelMark = vp.marks.createTextMark(root, "vpxAxisLabel")
                     .keyFunc(chartFrame.labelKeyFunc)
-                    .onShade(function (element, record, index, isNew) {
+                    .onShade(function (element, record, index, isNew, context, transition, isLastNew) {
                     var textHeight = _this._szMaxText.height;
                     var availPixelsPerLabel = _this.getAvailablePixelsPerLabelForTruncation(_this._actualLabelRotation);
                     //---- will we apply truncation? ----
@@ -6114,29 +6136,29 @@ var vp;
                     var cx = record.offset;
                     var yBottom = _this._offset + textHeight;
                     var availPixelsPerLabel = _this.getAvailablePixelsPerLabelForTruncation(_this._actualLabelRotation);
-                    var myHeight = _this.shadeTextLabel(index, element, cx, yBottom, record.label, "middle", "bottom", chartFrame.LabelLocation.bottom, false, textHeight);
+                    var myHeight = _this.shadeTextLabel(index, element, cx, yBottom, record.label, "middle", "bottom", chartFrame.LabelLocation.bottom, false, textHeight, isLastNew);
                     _this._maxTextHeight = Math.max(_this._maxTextHeight, myHeight);
                     if (_this._onShade) {
-                        _this._onShade(element, record, index, isNew);
+                        _this._onShade(element, record, index, isNew, isLastNew);
                     }
                 });
                 //---- create AXIS TICKS ----
                 this._tickMark = vp.marks.createLineMark(root, "vpxAxisTick")
                     .keyFunc(chartFrame.indexKeyFunc)
-                    .onShade(function (element, record, index, isNew) {
-                    _this.verticalTickShader(element, record, index, isNew, _this._offset, _this._drawingParams.tickLength, record);
+                    .onShade(function (element, record, index, isNew, context, transition, isLastNew) {
+                    _this.verticalTickShader(element, record, index, isNew, _this._offset, _this._drawingParams.tickLength, record, isLastNew);
                 });
                 //---- create AXIS TICK BOXES ----
                 this._tickBox = vp.marks.createRectangleMark(root, "vpxAxisTickBox")
                     .keyFunc(chartFrame.indexKeyFunc)
-                    .onShade(function (element, record, index, isNew) {
-                    _this.verticalTickBoxShader(element, record, index, isNew, _this._offset, _this._drawingParams.tickLength, record);
+                    .onShade(function (element, record, index, isNew, context, transition, isLastNew) {
+                    _this.verticalTickBoxShader(element, record, index, isNew, _this._offset, _this._drawingParams.tickLength, record, isLastNew);
                 });
                 //---- create MINOR TICKS  ----
                 this._minorTickMark = vp.marks.createLineMark(root, "vpxAxisMinorTick")
                     .keyFunc(chartFrame.indexKeyFunc)
-                    .onShade(function (element, record, index, isNew) {
-                    _this.verticalTickShader(element, record, index, isNew, _this._offset, _this._drawingParams.minorTickLength, record);
+                    .onShade(function (element, record, index, isNew, context, transition, isLastNew) {
+                    _this.verticalTickShader(element, record, index, isNew, _this._offset, _this._drawingParams.minorTickLength, record, isLastNew);
                 });
                 //---- create AXIS LINE ----
                 this._axisLineMark = vp.marks.createLineMark(root, "vpxAxisLine")
@@ -8259,6 +8281,18 @@ var vp;
             return nameColumnAgg;
         })();
         data_1.nameColumnAgg = nameColumnAgg;
+        function normalize(data, toMin, toMax) {
+            if (toMin === void 0) { toMin = -1; }
+            if (toMax === void 0) { toMax = 1; }
+            var min = data.min();
+            var max = data.max();
+            var newData = data.map(function (num, index) {
+                var newNum = vp.data.mapValue(num, min, max, toMin, toMax);
+                return newNum;
+            });
+            return newData;
+        }
+        data_1.normalize = normalize;
     })(data = vp.data || (vp.data = {}));
 })(vp || (vp = {}));
 var vp;
@@ -10719,16 +10753,20 @@ var vp;
                 eventName = "DOMMouseScroll";
             }
             if ((eventName == "resize") && (elem != window)) {
-                //---- add support for resize events on non-window elements ----
-                if (!elem.resizeEvent) {
-                    if (elem.tagName == "circle") {
-                        elem.resizeEvent = { prevWidth: vp.dom.width(elem), prevRadius: vp.dom.attr(elem, "radius"), callBacks: [] };
-                    }
-                    else {
-                        elem.resizeEvent = { prevWidth: vp.dom.width(elem), prevHeight: vp.dom.height(elem), callBacks: [] };
-                    }
-                }
-                elem.resizeEvent.callBacks.push(funcToCall);
+                ////---- add support for resize events on non-window elements ----
+                //if (!elem.resizeEvent)
+                //{
+                //    if (elem.tagName == "circle")
+                //    {
+                //        elem.resizeEvent = { prevWidth: vp.dom.width(elem), prevRadius: vp.dom.attr(elem, "radius"), callBacks: [] };
+                //    }
+                //    else
+                //    {
+                //        elem.resizeEvent = { prevWidth: vp.dom.width(elem), prevHeight: vp.dom.height(elem), callBacks: [] };
+                //    }
+                //}
+                //elem.resizeEvent.callBacks.push(funcToCall);
+                throw "bp.dom.attach: resize event no longer supported for non-window elements";
             }
             else {
                 if ((elem.control) && (elem.control.addEventListener)) {
@@ -10740,6 +10778,9 @@ var vp;
                 }
                 else if (elem.attachEvent) {
                     elem.attachEvent(eventName, funcToCall);
+                }
+                else {
+                    throw "Cannot attach to non-DOM element: " + elem;
                 }
             }
         }
@@ -10853,27 +10894,16 @@ var vp;
             return elem;
         }
         events.elementFromPoint = elementFromPoint;
-        //---- local init code ----
-        attach(window, "resize", function (e) {
-            triggerResizeRecursive(document.body);
-        });
+        //---- local init code (try/catch is so it can be processed from a web worker thread ----
+        try {
+            attach(window, "resize", function (e) {
+                triggerResizeRecursive(document.body);
+            });
+        }
+        catch (ex) {
+        }
     })(events = vp.events || (vp.events = {}));
 })(vp || (vp = {}));
-//module vp
-//{
-//    export function attach(elem, eventName, funcToCall, useCapturePhase?)
-//    {
-//        return vp.events.attach(elem, eventName, funcToCall, useCapturePhase);
-//    }
-//    export function detach(elem, eventName, funcToCall, useCapturePhase?)
-//    {
-//        return vp.events.detach(elem, eventName, funcToCall, useCapturePhase);
-//    }
-//    export function mousePosition(e, relToParent?: any)
-//    {
-//        return vp.events.mousePosition(e, relToParent);
-//    }
-//}
 ///-----------------------------------------------------------------------------------------------------------------
 /// inkHitTest.ts.  Copyright (c) 2014 Microsoft Corporation.
 ///     - part of the vuePlotCore library 
@@ -13416,6 +13446,14 @@ var vp;
             return value;
         }
         formatters.format = format;
+        /**
+         *  return a subset of "text" that doesn't exceed "maxLength".
+         * @param text
+         * @param maxLength
+         * @param addEllipses
+         * @param fakeLabel can be SVGTextElement or HTMLElement
+         * @param ellipsesWidth
+         */
         function truncateText(text, maxLength, addEllipses, fakeLabel, ellipsesWidth) {
             var newStr = "";
             //---- first, see if whole text fits ----
@@ -13567,7 +13605,7 @@ var vp;
                 }
                 else if (fmt.startsWith("yy")) {
                     //---- 2 digit year----
-                    var str = (date.getFullYear() % 100) + "";
+                    var str = (date.getFullYear() + "").substr(2); // drop first 2 chars
                     output += str;
                     index += 3;
                 }
@@ -13662,6 +13700,7 @@ var vp;
             var hasDecimal = format.contains(".");
             var decimalDigits = getDecimalDigits(format);
             var fmt = format;
+            value = +value; // ensure its a number
             if (fmt.contains("E+00")) {
                 //---- scientific notation ----
                 var str = value.toExponential(decimalDigits);
@@ -13690,6 +13729,18 @@ var vp;
             return output;
         }
         formatters.formatNumber = formatNumber;
+        function createNumFormatterFromRange(minValue, maxValue, steps) {
+            if (steps === void 0) { steps = 2; }
+            var numDecimals = 2;
+            var range = maxValue - minValue;
+            if (range > steps) {
+                numDecimals = 0;
+            }
+            //---- TODO: increase decimals as range gets smaller ----
+            var formatter = formatters.createCommaFormatter(numDecimals);
+            return formatter;
+        }
+        formatters.createNumFormatterFromRange = createNumFormatterFromRange;
         function createDateFormatterFromRange(minDate, maxDate, steps) {
             if (steps === void 0) { steps = 2; }
             /// formats: m/dd/yyyy, mmm-yy, hh:mm:ss AM/PM. */
@@ -14814,10 +14865,10 @@ var vp;
                     else {
                         this._dataAnimMgr.setData(data);
                     }
-                    this._dataAnimMgr.updateShapes(this._seriesIndex, this._seriesCount, function (elem, data, index, isNew) {
+                    this._dataAnimMgr.updateShapes(this._seriesIndex, this._seriesCount, function (elem, data, index, isNew, isLastNew) {
                         _this.applyClass(elem);
                         _this.applyDrawingParams(elem);
-                        _this._onShaderCallback(elem, data.data, index, isNew, context, transition);
+                        _this._onShaderCallback(elem, data.data, index, isNew, context, transition, isLastNew);
                         _this.postProcessShape(elem);
                     });
                 }
@@ -20193,7 +20244,19 @@ var vp;
         function copyArray(aray) {
             var newArray = null;
             if (aray) {
-                newArray = aray.slice(0);
+                if (aray.slice) {
+                    newArray = aray.slice(0);
+                }
+                else if (aray instanceof Float32Array) {
+                    newArray = new Float32Array(aray);
+                }
+                else {
+                    newArray = [];
+                    //---- pseudo array ----
+                    for (var i = 0; i < aray.length; i++) {
+                        newArray[i] = aray[i];
+                    }
+                }
             }
             return newArray;
         }
@@ -21011,7 +21074,7 @@ var vp;
             }
             else if (units == TimeUnits.quarters) {
                 var months = dt.getMonth();
-                var qtr = months % 3;
+                var qtr = months / 3;
                 var newQtr = unitFactor * Math.floor(qtr / unitFactor);
                 var newMonth = 3 * newQtr;
                 dt = new Date(dt.getFullYear(), newMonth);
@@ -21333,4 +21396,3 @@ var vp;
         marks.createComposerMark = createComposerMark;
     })(marks = vp.marks || (vp.marks = {}));
 })(vp || (vp = {}));
-//# sourceMappingURL=VuePlotCore.js.map

@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    frameOrArray.ts - encapsulates an array of dataFrameClass or a single instance.
 //-------------------------------------------------------------------------------------
 

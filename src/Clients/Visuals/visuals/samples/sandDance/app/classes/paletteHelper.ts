@@ -90,7 +90,7 @@ module beachPartyApp
             }
         }
 
-        static buildImageBreaksFromSettings(im: bps.ImageMappingData, colInfo: bps.ColInfo, useNiceNumbers: boolean)
+        static buildShapeBreaksFromSettings(im: bps.ShapeMappingData, colInfo: bps.ColInfo, useNiceNumbers: boolean)
         {
             if (im)
             {
@@ -102,9 +102,6 @@ module beachPartyApp
                 {
                     if (colInfo)
                     {
-                        //---- the default image palette, for now ----
-                        //palette = ["filled circle", "filled square", "filled triangle", "circle", "square", "triangle"];
-
                         var isCategory = (im.forceCategory || colInfo.colType === "string");
 
                         if (isCategory)

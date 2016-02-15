@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    hitTestRect.ts - hit-testing of screen rectangle against set of bounding boxes.
 //-------------------------------------------------------------------------------------
 

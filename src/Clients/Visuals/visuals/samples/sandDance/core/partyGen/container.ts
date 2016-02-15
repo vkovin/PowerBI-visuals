@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    container.ts - layout class that manages a set of sub-containers or shapes.
 //-------------------------------------------------------------------------------------
 //var mediumSales: any[];

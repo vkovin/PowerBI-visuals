@@ -32,15 +32,16 @@ module beachParty
 
         constructor(hasHeader: boolean, sepChar: string, findTypes: boolean, fixupValues: boolean)
         {
-            this._hasHeader = (!hasHeader) ? false : hasHeader;
+            this._hasHeader = (hasHeader === null) ? false : hasHeader;
             this._findTypes = findTypes;
-            this._sepChar = (sepChar === null || sepChar === undefined) ? "\t" : sepChar;
+            this._sepChar = (sepChar === null) ? "\t" : sepChar;
             this._fixupValues = fixupValues;
         }
 
         /// public: load(csv)
         public loadFromText(csv: string)
         {
+            var startTimeInMs = vp.utils.now();
             var rows = [];
 
             var scanner = new CsvScannerClass(csv, this._sepChar, "\"");
@@ -49,6 +50,9 @@ module beachParty
             {
                 if (this._hasHeader)
                 {
+                    //---- read first line containing column headers ----
+                    var colNum = 0;
+
                     //---- process first line ----
                     while (true)
                     {
@@ -76,19 +80,21 @@ module beachParty
             }
 
             var lastRowOffset = 0;
+            var malformedRowErrorCount = 0;
+            var reportMalformedRowErrors = true;
 
             while (true)
             {
                 var row = this.collectRowValues(scanner, this._colNames);
 
                 var colsFound = vp.utils.keys(row).length;
-                if (colsFound === 0 && scanner.endOfFile())
+                if (colsFound == 0 && scanner.endOfFile())
                 {
                     break;
                 }
 
                 //---- if no header present, take first line of values as the "soft" column count ----
-                if (this._colCount === 0)
+                if (this._colCount == 0)
                 {
                     this._colCount = colsFound;
                 }
@@ -126,6 +132,9 @@ module beachParty
                 }
             }
 
+            var elapsedMs = new Date().getTime() - startTimeInMs;
+            // alert("load() elapsed ms = " + elapsedMs.toString());
+
             return rows;
         }
 
@@ -133,7 +142,7 @@ module beachParty
         {
             //---- process next line (row) of data ----
             var colNum = 0;
-            var row = {};
+            var row = {}
 
             while (true)
             {
@@ -185,7 +194,7 @@ module beachParty
                     str = "";
                 }
 
-                if (!this._fixupValues && str.trim() === "")
+                if (!this._fixupValues && str.trim() == "")
                 {
                     //---- convert missing number to null ----
                     values.push(null);
@@ -196,7 +205,7 @@ module beachParty
                     if (isNaN(value))
                     {
                         str = str.toLowerCase();
-                        if (str === "null" || str === "na" || str === "")
+                        if (str == "null" || str == "na" || str == "")
                         {
                             value = 0;
                         }
@@ -233,11 +242,11 @@ module beachParty
                 var row = rows[i];
                 var str = row[colName].toLowerCase();
 
-                if (str === "true")
+                if (str == "true")
                 {
                     values.push(true);
                 }
-                else if (str === "false")
+                else if (str == "false")
                 {
                     values.push(false);
                 }

@@ -12,101 +12,32 @@ module beachParty
         public static createCatBins(nv: NamedVectors, colName: string, maxCategoryBins: number,
             addIndexes: boolean, buildAssignments: boolean, binSortOptions?: BinSortOptionsClass, md?: bps.MappingData): BinResult
         {
-            var bins = [];
-            var assignments = [];
-
             var colDataInfo = <NumericVector> nv[colName];
+            var typeName = colDataInfo.colType;
             var filter = (nv.layoutFilter) ? nv.layoutFilter.values : null;
-            var isUsingTags = (md && md.tagDelimiter !== undefined && md.tagDelimiter !== bps.TagDelimiter.none);
-            var keyList = <string[]>null;
-            var keysSorted = true;
+            var isUsingTags = (md && md.tagDelimiter != undefined && md.tagDelimiter != bps.TagDelimiter.none);
 
-            if (isUsingTags)
-            {
-                keyList = [];
-                var groups = this.groupTags(nv, colName, filter, md, binSortOptions, keyList, assignments, buildAssignments);
-            }
-            else
-            {
-                //---- first, just group the records by their keys ----
-                var groups = this.groupRecordsByKey(nv, colName, filter, binSortOptions);
-            }
+            var result0 = BinHelperCat.getSortedKeyList(isUsingTags, nv, colName, filter, md,
+                binSortOptions, assignments, buildAssignments, colDataInfo, maxCategoryBins);
 
-            var sumColData = null;
-            if (binSortOptions && binSortOptions.sumByColumn)
-            {
-                sumColData = nv[binSortOptions.sumByColumn].values;
-            }
-
-            if (!keyList)
-            {
-                //---- get preferred list of keys ----
-                if (md && md.breaks)
-                {
-                    keyList = md.breaks.map((value) => value + "");
-                }
-                else 
-                {
-                    keyList = <string[]>utils.getFilteredSortedKeys(colDataInfo, nv.layoutFilter);
-
-                    if (!keyList)
-                    {
-                        keyList = vp.utils.keys(groups);
-                        keysSorted = false;
-                    }
-                }
-            }
-
-            //---- now sort keys as needed ----
-            var sortByKeyNames = (binSortOptions === undefined || binSortOptions === null || binSortOptions.sortDirection === bps.BinSorting.none);
-            if (sortByKeyNames)
-            {
-                if (!keysSorted)
-                {
-                    //---- sort the keys, if not too many ----
-                    var sortMax = 50000;
-                    if (keyList.length <= sortMax)
-                    {
-                        keyList.sort();
-                    }
-                }
-            }
-            else 
-            {
-                keyList = this.sortByContent(keyList, groups, binSortOptions);
-            }
-
-            //---- now it is safe to compute the OTHER column (as per keyList sorted keys) ----
-            var useOtherBin = (keyList.length > maxCategoryBins);
-            if (useOtherBin)
-            {
-                var otherKeys = keyList.slice(maxCategoryBins - 1);
-                keyList = keyList.slice(0, maxCategoryBins - 1);
-                var otherMap = {};
-
-                //--- build otherList ----
-                var otherList: string[] = [];
-                for (var i = 0; i < otherKeys.length; i++)
-                {
-                    var otherKey = otherKeys[i];
-                    otherMap[key] = true;
-
-                    var list = <string[]>groups[otherKey];
-                    otherList = otherList.concat(list);
-                }
-
-                //---- for now, always put the "other" column at the end of the sorted keys ----
-                keyList.push("Other");
-                var otherIndex = keyList.length - 1;
-
-                groups["Other"] = otherList;
-            }
+            var keyList = result0.keyList;
+            var otherKey = result0.otherKey;
+            var useOtherBin = result0.useOtherBin;
+            var otherKeys = result0.otherKeys;
+            var sumColData = result0.sumColData;
+            var groups = result0.groups;
+            var otherMap = result0.otherMap;
+            var otherIndex = result0.otherIndex;
 
             var binCount = keyList.length;
-            vp.utils.debug("--> binHelperCat: colName=" + colName + ", origCol=" + colDataInfo.colName + ", keyCount=" + binCount);
+
+            //vp.utils.debug("--> binHelperCat: colName=" + colName + ", origCol=" +
+            //    colDataInfo.colName + ", keyCount=" + binCount);
 
             var keyIndexes: any = {};
             var pkVector = nv.primaryKey;
+            var bins = [];
+            var assignments = [];
 
             //---- initialize each bin ----
             for (var i = 0; i < binCount; i++)
@@ -114,20 +45,22 @@ module beachParty
                 var name = keyList[i];
                 var isOther = false;
 
-                if ((i === binCount - 1) && (useOtherBin))
+                if ((i == binCount - 1) && (useOtherBin))
                 {
                     //name = "Other";
                     isOther = true;
                     //otherKeys = keyList.slice(i);
                 }
 
+                var displayName;
+
                 if (md && md.labels && md.labels.length)
                 {
-                    var displayName = md.labels[i];
+                    displayName = md.labels[i];
                 }
                 else
                 {
-                    var displayName = name;
+                    displayName = name;
 
                     if (md.formatting)
                     {
@@ -191,7 +124,7 @@ module beachParty
 
                         var binIndex = <number>keyIndexes[key];
 
-                        if (binIndex === undefined || binIndex === null)
+                        if (binIndex === undefined)
                         {
                             if (otherMap && otherMap[key])
                             {
@@ -206,26 +139,26 @@ module beachParty
 
                         //var binIndex = (keyIndexes[key] == undefined) ? -1 : <number>keyIndexes[key]; //var binIndex = keys.indexOf(key);
 
-                        if (binIndex >= binCount || binIndex === -1)
+                        if (binIndex >= binCount || binIndex == -1)
                         {
                             //---- put in last (OTHER) bin ----
                             binIndex = binCount - 1;
                         }
 
-                        if (binIndex === -1)
+                        if (binIndex == -1)
                         {
                             // If the items have been filtered, then keysByRow will not contain an entry for the filtered-out items.
                             // As a result, 'key' will be undefined and indexOf(key) will return -1.  Since there is no bin for this
                             // item, there is nothing left to do. 
                             // See bug #9792.
-                            if (byVector[i] === -1) // Confirms that the item is filtered out
+                            if (byVector[i] == -1) // Confirms that the item is filtered out
                             {
                                 continue;
                             }
                         }
 
                         var bin = bins[binIndex];
-                        bin.count++;
+                        bin.count++;        // count # of key values in this bin
 
                         if (sumColData)
                         {
@@ -256,6 +189,99 @@ module beachParty
             result.isTagBinning = isUsingTags;
 
             return result;
+        }
+
+        static getSortedKeyList(isUsingTags, nv, colName, filter, md, binSortOptions, assignments,
+            buildAssignments, colDataInfo, maxCategoryBins)
+        {
+            var keyList = <string[]>null;
+            var keysSorted = true;
+            if (isUsingTags)
+            {
+                keyList = [];
+                var groups = this.groupTags(nv, colName, filter, md, binSortOptions, keyList, assignments, buildAssignments);
+            }
+            else
+            {
+                //---- first, just group the records by their keys ----
+                var groups = this.groupRecordsByKey(nv, colName, filter, binSortOptions);
+            }
+
+            var sumColData = null;
+            if (binSortOptions && binSortOptions.sumByColumn)
+            {
+                sumColData = nv[binSortOptions.sumByColumn].values;
+            }
+
+            if (!keyList)
+            {
+                //---- get preferred list of keys ----
+                if (md && md.breaks)
+                {
+                    keyList = md.breaks.map((value) => value + "");
+                }
+                else 
+                {
+                    keyList = <string[]>utils.getFilteredSortedKeys(colDataInfo, nv.layoutFilter);
+
+                    if (!keyList)
+                    {
+                        keyList = vp.utils.keys(groups);
+                        keysSorted = false;
+                    }
+                }
+            }
+
+            //---- now sort keys as needed ----
+            var sortByKeyNames = (binSortOptions == undefined || binSortOptions.sortDirection == bps.BinSorting.none);
+            if (sortByKeyNames)
+            {
+                if (!keysSorted)
+                {
+                    //---- sort the keys, if not too many ----
+                    var sortMax = 50000;
+                    if (keyList.length <= sortMax)
+                    {
+                        keyList.sort();
+                    }
+                }
+            }
+            else 
+            {
+                keyList = this.sortByContent(keyList, groups, binSortOptions);
+            }
+
+            //---- now it is safe to compute the OTHER column (as per keyList sorted keys) ----
+            var useOtherBin = (keyList.length > maxCategoryBins);
+            if (useOtherBin)
+            {
+                var otherKeys = keyList.slice(maxCategoryBins - 1);
+                keyList = keyList.slice(0, maxCategoryBins - 1);
+                var otherMap = {};
+
+                //--- build otherList ----
+                var otherList: string[] = [];
+                for (var i = 0; i < otherKeys.length; i++)
+                {
+                    var otherKey = otherKeys[i];
+                    otherMap[otherKey] = true;
+
+                    var list = <string[]>groups[otherKey];
+                    otherList = otherList.concat(list);
+                }
+
+                //---- for now, always put the "other" column at the end of the sorted keys ----
+                keyList.push("Other");
+                var otherIndex = keyList.length - 1;
+
+                groups["Other"] = otherList;
+            }
+
+            return {
+                keyList: keyList, otherKey: otherKey, useOtherBin: useOtherBin,
+                otherKeys: otherKeys, sumColData: sumColData, groups: groups, otherMap: otherMap,
+                otherIndex: otherIndex,
+            };
         }
 
         static groupTags(nv: NamedVectors, colName: string, filter: any, md: bps.MappingData, binSortOptions: BinSortOptionsClass,

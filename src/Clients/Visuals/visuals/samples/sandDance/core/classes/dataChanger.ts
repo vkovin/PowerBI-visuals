@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    dataChanger.ts - base class for classes that change data (supports lightweight MVC).
 //-------------------------------------------------------------------------------------
 
@@ -179,7 +179,15 @@ module beachParty
         {
             this._pendingDataChange[name] = changer;
 
-            this[name](value);
+            try
+            {
+                this[name](value);
+            }
+            finally
+            {
+                this._pendingDataChange[name] = null;
+            }
+
         }
     }
 

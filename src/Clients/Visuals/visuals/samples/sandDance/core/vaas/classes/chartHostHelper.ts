@@ -9,6 +9,8 @@ module bps
 {
     export class ChartHostHelperClass extends BaseHostHelperClass
     {
+        static instance: ChartHostHelperClass;
+
         private data: any;
 
         _clientAppId: string;
@@ -19,6 +21,8 @@ module bps
             super(objectCache, bpsChartOrIFrameId, bpsDomain, baseServerDir, fromDomain, "chartHost", isDivHost);
 
             this._clientAppId = clientAppId;
+
+            ChartHostHelperClass.instance = this;
         }
 
         preprocessMsg(msgBlock)
@@ -57,9 +61,9 @@ module bps
             }
         }
 
-        getIFrameSrc(baseServerDir: string): string
+        getIFrameSrc(baseServerDir: string)
         {
-            // var src = baseServerDir + "/beachParty/apps/default.html?vaas=true&visid=" + this._chartId;
+            // var src = baseServerDir + "/beachPartyEng/apps/default.html?vaas=true&visid=" + this._chartId;
             // return src;
 
             return "";
@@ -79,9 +83,26 @@ module bps
             this.postVisMsg("getDataVectors", names, null, null, null, null, false, callback, true);
         }
 
+        /**
+         * Get the string values for the specified column, sorted as specified by "sortByCount" (vs alpha)
+         and "reverseSort".  For each key, also return the count of how often it appears in the dataset in 
+         the specified column.  Limit the total number of key/count pairs returned to "maxCount".
+         * @param colName
+         * @param sortByCount
+         * @param reverseSort
+         * @param maxCount
+         */
+        public getColumnKeyCounts(colName: string, sortByCount: boolean, isDescendingSort: boolean,
+            maxCount: number, callback)
+        {
+            this.postVisMsg("getColumnKeyCounts", colName, sortByCount + "", isDescendingSort + "", maxCount + "",
+                null, null, callback, true);
+        }
+
         /** sets the selected shapes using the specified vector.  The "vectorType" describes the content of the
         vector (bit vector in the current sort order, bit vector in the natural order, or an array of natural order
-        primary keys (which can be in any order)).  FYI, the current sort order can be determined from the system "_primaryKey" vector.
+        primary keys (which can be in any order)).  “Bit vector” here refers to an array of 0’s and 1’s.
+        FYI, the current sort order can be determined from the system "_primaryKey" vector.
         "changeSource" is an optional parameter for tracking the source of a selection change.
          */
         public setSelection(vector: any[], vectorType: VectorType, changeSource = "client")
@@ -106,7 +127,7 @@ module bps
         /** search for (and select) records, matching "value" and "maxValue" on the column "colName".  The searchType specifes the 
         type of search to be performed.  The "searchAction" can be used to return the matching objects instead of selecting them. */
         public search(colName: string, value: string, maxValue?: string, searchType = TextSearchType.contains,
-            searchAction = SearchAction.selectMatches, searchRawValues?: boolean, callback?: any)
+            searchAction = SearchAction.selectMatches, searchRawValues?: boolean, caseSensitive?: boolean, callback?: any)
         {
             var sp = new SearchParams();
             sp.colName = colName;
@@ -115,9 +136,17 @@ module bps
             sp.searchType = searchType;
             sp.searchAction = searchAction;
             sp.searchRawValues = searchRawValues;
+            sp.caseSensitiveSearch = caseSensitive;
 
             var strSP = JSON.stringify(sp);
             this.postVisMsg("search", strSP, undefined, undefined, undefined, undefined, false, callback);
+        }
+
+         /** execute a search query composed of and-ing together the result of each SearchParams object. */
+        public searchEx(spList: bps.SearchParams[], callback?: any)
+        {
+            var strSP = JSON.stringify(spList);
+            this.postVisMsg("searchEx", strSP, undefined, undefined, undefined, undefined, false, callback, true);
         }
 
         /** sort the data based on the specifed column name and sort direction. */
@@ -162,6 +191,12 @@ module bps
             this.postVisMsg("setShapeImage", imgSrc);
         }
 
+        /** enables or disables the use of shape images. */
+        public enableShapeImage(value: boolean)
+        {
+            this.postVisMsg("enableShapeImage", value+"");
+        }
+
         /** When true (the default), changes to chart properties will result in the scheduling of a chart rebuild and draw cycle.  When false, the chart will only
          * be rebuilt/redrawn when explictly requested. 
          */
@@ -170,7 +205,7 @@ module bps
             this.postVisMsg("setAutoRebuild", value + "", rebuildNow + "", skipFilterSecondStage + "");
         }
 
-        /** internal method used to relay a change to the browser's localstorage to the BPS engine. */
+        /** internal method used to relay a change from the app's localstorage to the BPS engine. */
         public onLocalStorageChange()
         {
             this.postVisMsg("onLocalStorageChange");
@@ -237,10 +272,10 @@ module bps
         }
 
         /** used to specify the shape (image) mapping settings (column, etc). */
-        public setImageMapping(value: ImageMappingData)
+        public setShapeMapping(value: ShapeMappingData)
         {
             var str = JSON.stringify(value);
-            this.postVisMsg("setImageMapping", str);
+            this.postVisMsg("setShapeMapping", str);
         }
 
         /** used to specify the facet binning settings (column, # of facets). */
@@ -271,6 +306,13 @@ module bps
             this.postVisMsg("setZMapping", str);
         }
 
+        /** used to specify the column mapping for SUM and SQUARIFY. */
+        public setAuxMapping(value: MappingData)
+        {
+            var str = JSON.stringify(value);
+            this.postVisMsg("setAuxMapping", str);
+        }
+
         /** get the most recent set of engine trace records. */
         public getEngineEvents(callback)
         {
@@ -281,6 +323,12 @@ module bps
         public getMemoryUse(callback)
         {
             this.postVisMsg("getMemoryUse", null, null, null, null, null, null, callback, true);
+        }
+
+        /** gets the plot engine's max shape size (in screen pixel units) for a scatter plot type layout. */
+        public getScatterShapeSizeInPixels(callback)
+        {
+            this.postVisMsg("getScatterShapeSizeInPixels", null, null, null, null, null, null, callback, true);
         }
 
         /** gets the column values for the specified record, and also returns its screen bounds in the chart layout. */
@@ -410,6 +458,32 @@ module bps
             this.postVisMsg("setData", strData, strParams, undefined, undefined, undefined, undefined, callback);
         }
 
+        /** Used to load data and the systemViewData at once, for loading the engine side of an insight.
+        Returned in msgBlock:
+            dataFrameLoadedMsgBlock - "onDataFrameLoaded" style msgBlock, if data was actually loaded.
+            selectedChangedMsgBlock - "onSelectionChanged" style msgBlock, if selection actually changed.
+            filterChangedMsgBlock - "onFilterChanged" style msgBlock, if filter actually changed.
+         */
+        public setDataAndSystemView(data: any, dataLoad: WorkingDataParams, svd: SystemViewData, callback)
+        {
+            var strData = (data) ? JSON.stringify(data) : null;
+            var strParams = (dataLoad) ? JSON.stringify(dataLoad) : null;
+            var strSvd = (svd) ? JSON.stringify(svd) : null;
+
+            this.postVisMsg("setDataAndSystemView", strData, strParams, strSvd, undefined, undefined, undefined, callback);
+        } 
+
+        /** Used to load data directly into the chart engine.  data can be one of: 
+        dataFrame, array of records, CSV text, or JSON text.  DataFrame is the fastest and preferred format.    
+        If optional "preload" is supplied, it is used to control how the text data is interpreted and loaded. */
+        public addColumnsToData(newCols: bps.ColInfo[], newData: any[], callback?: any)
+        {
+            var strCols = JSON.stringify(newCols);
+            var strData = JSON.stringify(newData);
+
+            this.postVisMsg("addColumnsToData", strCols, strData, undefined, undefined, undefined, undefined, callback);
+        }
+
         //TODO: check.
         public updateDataView(data: any, dataLoad?: WorkingDataParams, callback?: any): void {
             var strParams = JSON.stringify(dataLoad);
@@ -423,9 +497,9 @@ module bps
 
         /** get the system part of the view data (as SystemViewData). When the data has been received, 
          * the "callback" will be called. */
-        public getSystemViewData(getSnapshot: boolean, getReproData: boolean, callback) 
+        public getSystemViewData(snapshotType: SnapshotType, getReproData: boolean, callback) 
         {
-            this.postVisMsg("getSystemViewData", getSnapshot + "", getReproData + "", undefined, undefined, undefined, null, callback);
+            this.postVisMsg("getSystemViewData", snapshotType + "", getReproData + "", undefined, undefined, undefined, null, callback);
         }
 
         /** set the system part of the view data. */
@@ -499,6 +573,61 @@ module bps
             this.postVisMsg("set3dGridVisible", value + "");
         }
 
+        /** Sets the parameters for clustering data. */
+        public setClusteringParams(value: bps.ClusteringParams)
+        {
+            var str = JSON.stringify(value);
+            this.postVisMsg("setClusteringParams", str);
+        }
+
+        /** Sets the parameters for FLAT layout. */
+        public setFlatParams(value: bps.FlatParams)
+        {
+            var str = JSON.stringify(value);
+            this.postVisMsg("setFlatParams", str);
+        }
+
+        /** Sets the parameters for using WebGL instancing to draw shapes. */
+        public setInstancingParams(value: bps.InstancingParams)
+        {
+            var str = JSON.stringify(value);
+            this.postVisMsg("setInstancingParams", str);
+        }
+
+        /** Sets the parameters for the custom chart type. */
+        public setCustomParams(value: bps.CustomParams)
+        {
+            var str = JSON.stringify(value);
+            this.postVisMsg("setCustomParams", str);
+        }
+
+        /** Sets the parameters for the data cachine on the engine. */
+        public setDataCacheParams(value: bps.DataCacheParams)
+        {
+            var str = JSON.stringify(value);
+            this.postVisMsg("setDataCacheParams", str);
+        }
+
+        /** Sets the parameters for the Spiral layout. */
+        public setSpiralParams(value: bps.SpiralParams)
+        {
+            var str = JSON.stringify(value);
+            this.postVisMsg("setSpiralParams", str);
+        }
+
+        /** Sets the parameters for the SCATTERPLOT layout. */
+        public setScatterParams(value: bps.ScatterParams)
+        {
+            var str = JSON.stringify(value);
+            this.postVisMsg("setScatterParams", str);
+        }
+
+        /** set the current hover shape (draw as per hover params) using the shape's primaryKey. */
+        public setHoverItem(primaryKey: string)
+        {
+            this.postVisMsg("setHoverItem", primaryKey);
+        }
+
         /** this controls the hover operation (how shapes are detected under the mouse/pointer).  Note that turning off hover will disable tooltips.  */
         public setHoverParams(params: HoverParams)
         {
@@ -507,11 +636,11 @@ module bps
         }
 
         /** this controls the hover operation (how shapes are detected under the mouse/pointer).  Note that turning off hover will disable tooltips.  */
-        public applyHover(x: number, y: number, returnRecord: boolean, colNames?: any[], callback?: any)
+        public applyHover(x: number, y: number, returnRecord: boolean, colNames?: any[], showHover?: boolean, callback?: any)
         {
             var strColNames = JSON.stringify(colNames);
 
-            this.postVisMsg("applyHover", x+"", y+"", returnRecord+"", strColNames, undefined, undefined, callback, true);
+            this.postVisMsg("applyHover", x + "", y + "", returnRecord + "", strColNames, showHover+"", undefined, callback, true);
         }
 
         ///** when true, tooltips for each shape are enabled. */
@@ -535,15 +664,22 @@ module bps
         }
 
         /** specifies whether or not mouse/touch gestures for tranformations are enabled.  When true, gestures like pinch zoom, drag pan, and wheel operations are active. */
-        public setUseTransforms(value: boolean)
+        public setTransformMode(value: bps.TransformMode)
         {
-            this.postVisMsg("setUseTransforms", value+"");
+            this.postVisMsg("setTransformMode", value+"");
         }
 
         /** Resets the 3D transform and inertia to their default values. */
         public resetTransform()
         {
             this.postVisMsg("resetTransform");
+        }
+
+        /** zoom in on the data at the specified rectangle (in plot-relative screen coordinates. */
+        public dataZoom(rcZoom: ClientRect, zoomOut?: boolean)
+        {
+            var str = JSON.stringify(rcZoom);
+            this.postVisMsg("dataZoom", str, + zoomOut+"");
         }
 
         /** clear the selection, such that no records are selected. */
@@ -553,21 +689,21 @@ module bps
         }
 
         /** reset the FILTER and the SELECTION, such that no records are filtered out and no records are selected. */
-        public resetFilter()
+        public resetFilter(callback?: any)
         {
-            this.postVisMsg("resetFilter");
+            this.postVisMsg("resetFilter", null, null, null, null, null, null, callback);
         }
 
         /** filter OUT the UNSELECTED records. */
-        public isolateSelection()
+        public isolateSelection(callback?: any)
         {
-            this.postVisMsg("isolateSelection");
+            this.postVisMsg("isolateSelection", null, null, null, null, null, null, callback);
         }
 
         /** filter OUT the SELECTED records. */
-        public excludeSelection()
+        public excludeSelection(callback?: any)
         {
-            this.postVisMsg("excludeSelection");
+            this.postVisMsg("excludeSelection", null, null, null, null, null, null, callback);
         }
     }
 
@@ -630,6 +766,8 @@ module bps
         useNiceNumbers: boolean;
         minBreak: number;                        // set the starting break value (must be <= minData)
         maxBreak: number;                        // set the ending break value (must be >= maxData)
+        minBreakFacet: number;                   // the starting break value set when facets are in effect (set by engine)
+        maxBreakFacet: number;                   // the ending break value set when facets are in effect (set by engine)
         breaks: any[];                           // overrides normally determined breaks.  Dates should be specified as numbers here (+myDate).  
         labels: string[];                        // overrides the normal conversion of a break to a string
         formatting: string;                      // optional: specifies how to format the value (e.g., "#,##0.000" for number or "mmm-yy" for date)
@@ -706,7 +844,7 @@ module bps
         }
     }
 
-    export class ImageMappingData extends MappingData
+    export class ShapeMappingData extends MappingData
     {
         imagePalette: string[];
 
@@ -718,9 +856,18 @@ module bps
         }
     }
 
+    export class ChannelMappingData
+    {
+        redColumn: string;
+        greenColumn: string;
+        blueColumn: string;
+        //alphaColumn: string;
+    }
+
     export class ColorMappingData extends MappingData
     {
         isContinuous: boolean;
+        channelMapping: ChannelMappingData;
         colorPalette: any[];
 
         //---- color palette description (not used by chart engine) ----
@@ -747,6 +894,7 @@ module bps
         minValue: any;
         maxValue: any;
         searchType: TextSearchType;
+        caseSensitiveSearch: boolean;
         searchAction: SearchAction;
         searchRawValues: boolean;
     }
@@ -792,6 +940,7 @@ module bps
 
     export class ChartFrameData
     {
+        isVisible: boolean;
         opacity: number;
         labelColor: string;
         tickColor: string;
@@ -801,8 +950,9 @@ module bps
         yAxis: AxisData;
         zAxis: AxisData;
 
-        constructor()
+        constructor(isVisible = true)
         {
+            this.isVisible = isVisible;
             this.opacity = 1;
             this.labelColor = "white";
             this.tickColor = "white";
@@ -816,16 +966,17 @@ module bps
 
     export enum TextSearchType
     {
-        exactMatch,
-        startsWith,
-        contains,
-        lessThan,
-        lessThanEqual,
-        greaterThan,
-        greaterThanEqual,
-        betweenInclusive,
-        gtrValueAndLeqValue2,
-        notEqual,
+        exactMatch,     // 0
+        startsWith,     // 1
+        contains,       // 2
+        lessThan,       // 3
+        lessThanEqual,      // 4
+        greaterThan,        // 5
+        greaterThanEqual,   // 6
+        betweenInclusive,       // 7
+        gtrValueAndLeqValue2,   // 8
+        geqValueAndLessValue2,  // 9
+        notEqual,               // 10
     }
 
     export enum SearchAction
@@ -881,7 +1032,8 @@ module bps
         quad,
         cube,
         smartCube,          // renders same 3 vertices 12 times
-        line,
+        lineStrip,
+        linePairs,
         thickLine,
     }
 
@@ -895,7 +1047,8 @@ module bps
         facet: bps.FacetMappingData;
         size: bps.SizeMappingData;
         text: bps.TextMappingData;
-        image: bps.ImageMappingData;
+        shape: bps.ShapeMappingData;
+
 
         constructor(x: string, y: string, color?: string)
         {
@@ -955,6 +1108,7 @@ module bps
         tableName: string;          // SQL table name
         fileSource: string;         // known, local, url, sql
         primaryKeyCol: string;      // column containing a unique IO for every record
+        canLoadFromCache: boolean;  // if true, OK to load the file from cache (localstorage)
 
         //---- data transform ----
         queryString: string;        // SQL query
@@ -971,6 +1125,8 @@ module bps
 
         filteredOutKeys: string[];      // primary keys of FILTERED-OUT records
         selectedKeys: string[];         // primary keys of SELECTED records
+
+        supressDataFrameLoadedMsgToClient: boolean;     // used for loading insights
 
         constructor(dataName?: string, path?: string, fileSource?: string)
         {
@@ -1032,6 +1188,7 @@ module bps
         dataTips: DataTipData[];
         sortCol: string;
         isSortAscending: boolean;
+        flatParams: FlatParams;
 
         //---- METADATA starts here ----
 
@@ -1091,7 +1248,7 @@ module bps
     {
         all,
         selection,
-        // filter,
+        filter,
         view,
         data,
     }
@@ -1136,7 +1293,7 @@ module bps
             this.name = insightName;
             this.notes = notes;
             this.loadAction = LoadAction.all;
-            this.notesSource = NotesSource.both;
+            this.notesSource = NotesSource.none;
         }
     }
 
@@ -1237,6 +1394,12 @@ module bps
         imageIndex: number;
         opacity: number;
         theta: number;
+
+        //---- new members ----
+        staggerOffset: number;
+        redChannel: number;
+        greenChannel: number;
+        blueChannel: number;
     }
 
     /** Information to rebuild chart as SVG, etc. */
@@ -1252,6 +1415,7 @@ module bps
     {
         Bar,
         Column,
+        Custom,
         Flat,
         Density,
         Line,
@@ -1302,7 +1466,7 @@ module bps
         {
             this.hoverMatch = HoverMatch.point;
             this.squareSize = 10;
-            this.hoverEffect = HoverEffect.sameColor;
+            this.hoverEffect = HoverEffect.setColor;
             this.hoverColor = "purple";  
         }
     }
@@ -1397,9 +1561,11 @@ module bps
 
     export class DataTipData
     {
-        text: string;     // text displayed when this data was extracted
-        offset: any;      // optional: offset within parent canvas (if not bound to a record)
-        colName: string;   // optional: name of column this is bound to;
+        title: string;      // text displayed on top, in bold
+        text: string;       // text displayed when this data was extracted
+        offset: any;        // optional: offset within parent canvas (if not bound to a record)
+        colNames: string[]; // optional: name of 1 or more columns this is bound to
+        includeNames: boolean;      // if "name: " should prefix each colun value
         primaryKey: string;        // optional: primary key of record that this is bound to
     }
 
@@ -1418,4 +1584,180 @@ module bps
         nonIntersection,
     }
 
+    export enum SnapshotType
+    {
+        none,
+        plot,
+        chart,      // plot + axes
+    }
+
+    export class ClusteringParams
+    {
+        numClusters: number;
+
+        constructor()
+        {
+            this.numClusters = 3;
+        }
+    }
+
+    export class FlatParams
+    {
+        numColumns: number;
+        buildFromTop: boolean;
+
+        constructor()
+        {
+            this.numColumns = 0;        // not yet specified
+            this.buildFromTop = false;
+        }
+    }
+
+    export class InstancingParams
+    {
+        isInstancingEnabled: boolean;
+
+        constructor()
+        {
+            this.isInstancingEnabled = false;
+        }
+    }
+
+    export class SpiralParams
+    {
+        seed: number;
+
+        constructor()
+        {
+            this.seed = 137.508;
+        }
+    }
+
+    export class ScatterParams
+    {
+        percentExpandX: number;
+        percentExpandY: number;
+
+        constructor(percentExpandX = .5, percentExpandY = .5)
+        {
+            this.percentExpandX = percentExpandX;
+            this.percentExpandY = percentExpandY;
+        }
+    }
+
+    export enum ClusterResultMapping
+    {
+        none,
+        color,
+        size,
+        shape,
+    }
+
+    export enum PredefinedCustomChart
+    {
+        //---- flat ----
+        grid,
+        random,
+        poisson,
+        spiral,
+        squarify,
+
+        //---- mapping ----
+        line,
+        radial,
+        scatter,
+        xband,
+        yband,
+        scatter3D,
+
+        //---- bins ----
+        bar,
+        column,
+        density,
+        violin,
+        stacks,
+
+        trueCustom,         // temp class to truely use the specified controls to build a chart
+    }
+
+    export enum CustomColUsage
+    {
+        none,
+        map,
+        bin,
+    }
+
+    export enum CustomLayout
+    {
+        grid,
+        map,
+        radial,
+        random,
+        poisson,
+        squarify,
+        spiral,
+        stackX,
+        stackY,
+        stackZ,
+    }
+
+    export enum LayoutDirection
+    {
+        fromBottom,
+        fromLeft,
+        fromCenter,
+    }
+
+    export class CustomParams
+    {
+        xUsage: CustomColUsage;
+        yUsage: CustomColUsage;
+        zUsage: CustomColUsage;
+
+        layout: CustomLayout;
+        direction: LayoutDirection;
+
+        constructor()
+        {
+            this.xUsage = CustomColUsage.none;
+            this.yUsage = CustomColUsage.none;
+            this.zUsage = CustomColUsage.none;
+
+            this.layout = CustomLayout.random;
+        }
+    }
+
+    export class DataCacheParams
+    {
+        cacheLocalFiles: boolean;
+        cacheKnownFiles: boolean;
+        cacheWebFiles: boolean;
+        cacheSqlFiles: boolean;
+
+        constructor()
+        {
+            this.cacheLocalFiles = true;
+            this.cacheWebFiles = true;
+        }
+    }
+
+    /** on client side. */
+    export enum DragAction
+    {
+        select,
+        zoomIn,
+        rotate,
+        move,
+        wheel,
+    }
+
+    /** effect of dragging mouse/touch on plot, on engine side of things. */
+    export enum TransformMode
+    {
+        none,
+        auto,
+        rotate,
+        pan,
+        wheel,
+    }
 }

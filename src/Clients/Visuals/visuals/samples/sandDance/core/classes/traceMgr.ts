@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    traceMgr.ts - manages trace records.  These can be used to log structured information
 //      and then plot the resulting records.  Can be used to diagnose complex, temporal issues with the engine.
 //-------------------------------------------------------------------------------------
@@ -67,4 +67,11 @@ module beachParty
         end,            // end of a duration event
     }
 
+    export function addTrace(traceName: string, reason: string, eventType: TraceEventType, durationId?: string)
+    {
+        if (TraceMgrClass.instance)
+        {
+            TraceMgrClass.instance.addTrace(traceName, reason, eventType, durationId);
+        }
+    }
 }

@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    slidingWindow.ts - a sliding window sampler for streaming data. 
 //-------------------------------------------------------------------------------------
 

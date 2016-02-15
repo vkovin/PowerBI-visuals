@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    flatRandom.ts - builds a random 2d layout of sand shapes.
 //-------------------------------------------------------------------------------------
 
@@ -47,7 +47,7 @@ module beachParty
             this._nextRandIndex = 0;
         }
 
-        layoutDataForRecord(i: number, dc: DrawContext)
+        layoutDataForRecord(i: number, dc: DrawContext, dr: bps.LayoutResult)
         {
             var nv = dc.nvData;
             var scales = dc.scales;
@@ -61,22 +61,16 @@ module beachParty
             var xr = nv.randomX.values[ri];
             var yr = nv.randomY.values[ri];
 
-            var x = scales.x.scale(xr);
-            var y = scales.y.scale(yr);
-            var z = 0;      
+            dr.x = scales.x.scale(xr);
+            dr.y = scales.y.scale(yr);
+            dr.z = 0;      
 
-            var width = this._maxShapeSize * this.scaleColData(nv.size, i, scales.size, 1);
-            var height = width;
-            var depth = dc.defaultDepth2d;      // test out 3d cube in a 2d shape;
+            dr.width = this._maxShapeSize * this.scaleColData(nv.size, i, scales.size, 1);
+            dr.height = dr.width;
+            dr.depth = dc.defaultDepth2d      // test out 3d cube in a 2d shape
 
-            var colorIndex = this.scaleColData(nv.colorIndex, i, scales.colorIndex);
-            var imageIndex = this.scaleColData(nv.imageIndex, i, dc.scales.imageIndex);
-            var opacity = 1;
-
-            return {
-                x: x, y: y, z: z, width: width, height: height, depth: depth, colorIndex: colorIndex, opacity: opacity,
-                imageIndex: imageIndex, theta: 0,
-            };
+            dr.colorIndex = this.scaleColData(nv.colorIndex, i, scales.colorIndex);
+            dr.imageIndex = this.scaleColData(nv.imageIndex, i, dc.scales.imageIndex);
         }
     }
 }

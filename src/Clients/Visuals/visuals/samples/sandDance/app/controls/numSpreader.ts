@@ -149,6 +149,11 @@ module beachPartyApp
 
             var valueDelta = maxValue - minValue;
             var delta = percent * valueDelta / 100;
+
+            //---- ensure delta is at least 2*epsilon so we don't unselect our original record's value ----
+            var epsilon = .000001;
+            delta = Math.max(delta, 2 * epsilon);
+
             var minSpread = Math.max(minValue, value - delta);
             var maxSpread = Math.min(maxValue, value + delta);
 
@@ -156,10 +161,11 @@ module beachPartyApp
             this._maxSpread = maxSpread;
 
             var spreadText = percent + "%";
-            var vd = valueDelta / 50;
+            //var vd = valueDelta / 50;
+            var vd = (2*delta) / 50;
             var decimals = (vd >= 1) ? 0 : (-Math.ceil(Math.log10(vd)));
 
-            if (percent === 0)
+            if (percent == 0)
             {
                 decimals = undefined;
             }

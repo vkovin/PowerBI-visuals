@@ -15,7 +15,8 @@ module beachParty
         _colCount = 0;
         _rowCount = 0;
         _nextIndex = 0;
-        _maxShapeSize = 1;
+        _maxShapeWidth = 1;
+        _maxShapeHeight = 1;
         _itemSize = 0;
 
         constructor(view: DataViewClass, gl: any, chartState: any, container: HTMLElement, appMgr: AppMgrClass)
@@ -37,10 +38,19 @@ module beachParty
         {
             var result = super.buildScales(nv, rcxWorld, filteredRecordCount, facetCount);
             var margin = this._itemSize/4;
+            var fp = this._view.flatParams();
 
             //---- override X and Y scales - force the domain to [0..1] ----
             result.x = utils.makeLinearScale(0, 1, rcxWorld.left + margin, rcxWorld.right - margin);
-            result.y = utils.makeLinearScale(0, 1, rcxWorld.bottom + margin, rcxWorld.top - margin);
+
+            if (fp.buildFromTop)
+            {
+                result.y = utils.makeLinearScale(0, 1, rcxWorld.top - margin, rcxWorld.bottom + margin);
+            }
+            else
+            {
+                result.y = utils.makeLinearScale(0, 1, rcxWorld.bottom + margin, rcxWorld.top - margin);
+            }
 
             return result;
         }
@@ -49,22 +59,32 @@ module beachParty
         {
             var maxCount = this._maxCountAllFacets;
 
-            var aspect = dc.width / dc.height;
-            var colCount = Math.ceil(Math.sqrt(aspect * maxCount));
+            var fp = this._view.flatParams();
+            var colCount = fp.numColumns;
+
+            if (! colCount)
+            {
+                //---- num of columns not specified by user; compute it so that shapes are square ----
+                var aspect = dc.width / dc.height;
+                colCount = Math.ceil(Math.sqrt(aspect * maxCount));
+            }
+
             var rowCount = Math.ceil(maxCount / colCount);
 
             this._colCount = colCount;
             this._rowCount = rowCount;
 
             //---- use .85 to allow some space between shapes ----
-            var maxShapeSize = .85 * Math.min(dc.width / this._colCount, dc.height / this._rowCount);
-            this._maxShapeSize = maxShapeSize;      //   / dc.transformSizeFactor;
+            var spaceFactor = 1 - (.15 * this._view.separationFactor());
+
+            this._maxShapeWidth = spaceFactor * dc.width / this._colCount;
+            this._maxShapeHeight = spaceFactor * dc.height / this._rowCount;
 
             this._nextIndex = 0;
         }
 
         /** "bufferIndex" in the 0-based indexed into the sorted data buffers. */
-        layoutDataForRecord(bufferIndex: number, dc: DrawContext)
+        layoutDataForRecord(bufferIndex: number, dc: DrawContext, dr: bps.LayoutResult)
         {
             //---- flat grid layout ----
             var nv = dc.nvData;
@@ -83,23 +103,17 @@ module beachParty
             var xData = layoutIndex % this._colCount;
             var yData = Math.floor(layoutIndex / this._colCount);
 
-            var x = scales.x.scale((xData + .5)/this._colCount);
-            var y = scales.y.scale((yData + .5)/this._rowCount);
+            dr.x = scales.x.scale((xData + .5)/this._colCount);
+            dr.y = scales.y.scale((yData + .5)/this._rowCount);
+            dr.z = 0;      
 
-            var z = 0;      
+            var sizeFactor = this.scaleColData(nv.size, bufferIndex, dc.scales.size, 1);
+            dr.width = this._maxShapeWidth * sizeFactor;
+            dr.height = this._maxShapeHeight * sizeFactor;
+            dr.depth = dc.defaultDepth2d      // test out 3d cube in a 2d shape
 
-            var width = this._maxShapeSize * this.scaleColData(nv.size, bufferIndex, dc.scales.size, 1);
-            var height = width;
-            var depth = dc.defaultDepth2d;      // test out 3d cube in a 2d shape;
-
-            var colorIndex = this.scaleColData(nv.colorIndex, bufferIndex, scales.colorIndex);
-            var imageIndex = this.scaleColData(nv.imageIndex, bufferIndex, dc.scales.imageIndex);
-            var opacity = 1;
-
-            return {
-                x: x, y: y, z: z, width: width, height: height, depth: depth, colorIndex: colorIndex, opacity: opacity,
-                imageIndex: imageIndex, theta: 0,
-            };
+            dr.colorIndex = this.scaleColData(nv.colorIndex, bufferIndex, scales.colorIndex);
+            dr.imageIndex = this.scaleColData(nv.imageIndex, bufferIndex, dc.scales.imageIndex);
         }
     }
 }

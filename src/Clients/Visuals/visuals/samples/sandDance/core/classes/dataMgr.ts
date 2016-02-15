@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    dataMgr.ts - loads and manages data streams used by BeachParty.
 //-------------------------------------------------------------------------------------
 
@@ -13,6 +13,8 @@ module beachParty
     export var primaryKeyName = "_primaryKey";
     export var randomXName = "_randomX";
     export var randomYName = "_randomY";
+
+    export var systemColNames = [selectedName, filteredName, primaryKeyName, randomXName, randomYName];
 
     /** manages:
         - server data requests
@@ -36,6 +38,7 @@ module beachParty
         private _origColInfos: bps.ColInfo[];
         private _appMgr: AppMgrClass;
         private _isClientEdition;
+        private _colsOnDemand = false;
 
         /// selectMode logically belongs on the client, but since the engine processes events from the chart exes, 
         /// we keep it here.  this may change in the future.
@@ -60,6 +63,11 @@ module beachParty
                 }
             });
 
+        }
+
+        colsOnDemand()
+        {
+            return this._colsOnDemand;
         }
 
         hasSelectionChanged(keyList: string[])
@@ -95,23 +103,23 @@ module beachParty
         {
             vp.utils.debug("setDataDirect: calling loader");
 
-            var loader = new DataLoaderClass(this._preloadMgr);
-            var result = loader.processdData(data, wdParams);
+            var loader = new DataLoaderClass(this._preloadMgr, this._colsOnDemand, this._appMgr);
+            var result = loader.processData(data, wdParams);
 
             vp.utils.debug("setDataDirect: calling setDataAndInfo");
 
-            this.setDataAndInfo(result.origDf, result.postDf, result.wdParams);
+            this.setDataAndInfo(result.origDf, result.postDf, result.wdParams, loader);
 
             vp.utils.debug("setDataDirect ending");
         }
 
         loadKnownAsync(name: string, wdParams?: bps.WorkingDataParams, callback?: any)
         {
-            var loader = new DataLoaderClass(this._preloadMgr);
+            var loader = new DataLoaderClass(this._preloadMgr, this._colsOnDemand, this._appMgr);
 
             loader.loadKnownAsyncCore(name, null, (origDf, postDf, wdParams) =>
             {
-                this.setDataAndInfo(origDf, postDf, wdParams);
+                this.setDataAndInfo(origDf, postDf, wdParams, loader);
 
                 if (callback)
                 {
@@ -120,13 +128,13 @@ module beachParty
             });
         }
 
-        openPreloadAsync(dataFrame, wdParams?: bps.WorkingDataParams, callback?: any)
+        openPreloadAsync(wdParams?: bps.WorkingDataParams, callback?: any)
         {
-            var loader = new DataLoaderClass(this._preloadMgr);
+            var loader = new DataLoaderClass(this._preloadMgr, this._colsOnDemand, this._appMgr);
 
-            loader.openPreload(wdParams, dataFrame, null, (origDf, postDf, wdParams) =>
+            loader.openPreloadAsyncCore(wdParams, null, (origDf, postDf, wdParams) =>
             {
-                this.setDataAndInfo(origDf, postDf, wdParams);
+                this.setDataAndInfo(origDf, postDf, wdParams, loader);
 
                 if (callback)
                 {
@@ -146,9 +154,17 @@ module beachParty
             this.onDataChanged("SelectMode");
         }
 
-        getFilteredInVector(colName: string)
+        getFilteredInVector(colName: string, asNumeric?: boolean)
         {
-            var rawVector = <any[]>this._dataFrame.getVector(colName, false);
+            if (asNumeric)
+            {
+                var rawVector = <any>this._dataFrame.getNumericVector(colName).values;
+            }
+            else
+            {
+                var rawVector = <any>this._dataFrame.getVector(colName, false);
+            }
+
             var filter = this.getFilteredVector(false);
             var newVector = [];
 
@@ -192,6 +208,33 @@ module beachParty
             return this._origColInfos;
         }
 
+        getColKeyCounts(colName: string, sortByCount: boolean, isDescendingSort: boolean, maxKeys: number)
+        {
+            var rawVector = this._dataFrame.getVector(colName, false);
+            var keyCountList = rawVector.groupBy().map((g) => { return { key: g.key, count: g.values.length }});
+
+            if (sortByCount)
+            {
+                var sortedList = keyCountList.orderByNum((g) => g.count);
+            }
+            else
+            {
+                var sortedList = keyCountList.orderByStr((g) => g.key);
+            }
+
+            if (isDescendingSort)
+            {
+                sortedList = sortedList.reverse();
+            }
+
+            if (sortedList.length > maxKeys)
+            {
+                sortedList = sortedList.slice(0, maxKeys - 1);
+            }
+
+            return sortedList;
+        }
+
         getColInfos(applyFilter?: boolean)
         {
             var colInfos = this._colInfos;
@@ -225,14 +268,15 @@ module beachParty
                 var name = names[i];
                 var fieldInfo = wdParams.getField(name);
 
-                if (!name.startsWith("_"))
-                {
-                    var colType = df.getColType(name);
+                var colType = df.getColType(name);
 
-                    var keys = null;
+                var keys = null;
+
+                if (df.isColLoaded(name))
+                {
                     var numVector = df.getNumericVector(name);
 
-                    if (colType === "string")
+                    if (colType == "string")
                     {
                         keys = numVector.keyInfo.sortedKeys;
                     }
@@ -241,12 +285,12 @@ module beachParty
 
                     var min = numVector.values.min();
                     var max = numVector.values.max();
-
-                    var info = new bps.ColInfo(name, desc, colType, keys, min, max);
-                    info.calcFieldExp = (fieldInfo) ? fieldInfo.calcFieldExp : null;
-
-                    colInfos.push(info);
                 }
+
+                var info = new bps.ColInfo(name, desc, colType, keys, min, max);
+                info.calcFieldExp = (fieldInfo) ? fieldInfo.calcFieldExp : null;
+
+                colInfos.push(info);
             }
 
             return colInfos;
@@ -293,12 +337,31 @@ module beachParty
             return this._fn;
         }
 
-        searchExactMatch(selection: number[], data: any[], value: string, maxValue: string)
+        searchExactMatchNumber(selection: number[], data: any[], value: string, maxValue: string)
         {
             for (var i = 0; i < data.length; i++)
             {
                 var itemValue = data[i];
-                if (itemValue === value)
+
+                if (isNaN(+itemValue))
+                {
+                    //---- must do an isNan() test on itemValue ----
+                    selection[i] = isNaN(+value) ? 1 : 0;
+                }
+                else if (itemValue == value)
+                {
+                    selection[i] = 1;
+                }
+            }
+        }
+
+        searchExactMatchString(selection: number[], data: any[], value: string, maxValue: string)
+        {
+            for (var i = 0; i < data.length; i++)
+            {
+                var itemValue = data[i];
+
+                if (itemValue == value)
                 {
                     selection[i] = 1;
                 }
@@ -310,7 +373,13 @@ module beachParty
             for (var i = 0; i < data.length; i++)
             {
                 var itemValue = data[i];
-                if (itemValue !== value)
+
+                if (isNaN(+itemValue))
+                {
+                    //---- must do an isNan() test on itemValue ----
+                    selection[i] = isNaN(+value) ? 0 : 1;
+                }
+                else if (itemValue != value)
                 {
                     selection[i] = 1;
                 }
@@ -398,7 +467,13 @@ module beachParty
             for (var i = 0; i < data.length; i++)
             {
                 var itemValue = data[i];
-                if (itemValue >= value && itemValue <= maxValue)
+
+                if (isNaN(+itemValue))
+                {
+                    //---- must do an isNan() test on itemValue ----
+                    selection[i] = isNaN(+value) ? 1 : 0;
+                }
+                else if (itemValue >= value && itemValue <= maxValue)
                 {
                     selection[i] = 1;
                 }
@@ -410,7 +485,31 @@ module beachParty
             for (var i = 0; i < data.length; i++)
             {
                 var itemValue = data[i];
-                if (itemValue > value && itemValue <= maxValue)
+
+                if (isNaN(+itemValue))
+                {
+                    //---- must do an isNan() test on itemValue ----
+                    selection[i] = isNaN(+value) ? 1 : 0;
+                }
+                else if (itemValue > value && itemValue <= maxValue)
+                {
+                    selection[i] = 1;
+                }
+            }
+        }
+
+        searchGeqValueAndLessValue2(selection: number[], data: any[], value: string, maxValue: string, isString: boolean)
+        {
+            for (var i = 0; i < data.length; i++)
+            {
+                var itemValue = data[i];
+
+                if (isNaN(+itemValue))
+                {
+                    //---- must do an isNan() test on itemValue ----
+                    selection[i] = isNaN(+value) ? 1 : 0;
+                }
+                else if (itemValue >= value && itemValue < maxValue)
                 {
                     selection[i] = 1;
                 }
@@ -447,13 +546,82 @@ module beachParty
             return numValue;
         }
 
-        searchColValue(sp: bps.SearchParams)
+        runSearchQuery(spList: bps.SearchParams[])
+        {
+            var matchVector = null;
+
+            for (var i = 0; i < spList.length; i++)
+            {
+                var sp = spList[i];
+                var mvSingle = this.runSearchNode(sp);
+
+                if (i == 0)
+                {
+                    matchVector = mvSingle;
+                }
+                else
+                {
+                    //---- AND them together ----
+                    for (var i = 0; i < matchVector.length; i++)
+                    {
+                        matchVector[i] = (matchVector[i] && mvSingle[i]);
+                    }
+                }
+            }
+
+            var sp = spList[0];
+            var searchAction = (sp.searchAction === undefined) ? bps.SearchAction.selectMatches : sp.searchAction;
+
+            var matches = this.applyMatchVector(matchVector, searchAction);
+            return matches;
+        }
+
+        private runSearchNode(sp: bps.SearchParams)
+        {
+            var matches = null;
+
+            var colName = sp.colName;
+            if (colName)
+            {
+                matches = this.searchSingleColumn(sp);
+            }
+            else
+            {
+                //---- OR-together search from each string column ----
+                for (var i = 0; i < this._colInfos.length; i++)
+                {
+                    var ci = this._colInfos[i];
+                    if (ci.colType == "string")
+                    {
+                        sp.colName = ci.name;
+                        var oneMatch = this.searchSingleColumn(sp);
+
+                        if (! matches)
+                        {
+                            matches = oneMatch;
+                        }
+                        else
+                        {
+                            //---- OR them together ----
+                            for (var j = 0; j < matches.length; j++)
+                            {
+                                matches[j] = (matches[j] || oneMatch[j]);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return matches;
+        }
+
+        private searchSingleColumn(sp: bps.SearchParams)
         {
             var colName = sp.colName;
             var value = sp.minValue;
             var maxValue = sp.maxValue;
             var searchType = sp.searchType;
-            var searchAction = (sp.searchAction === undefined || sp.searchAction === null) ? bps.SearchAction.selectMatches : sp.searchAction;
+            var searchAction = (sp.searchAction === undefined) ? bps.SearchAction.selectMatches : sp.searchAction;
 
             vp.utils.debug("search: colName=" + colName + ", value=" + value + ", maxValue=" + maxValue);
 
@@ -462,7 +630,7 @@ module beachParty
                 searchType = bps.TextSearchType.exactMatch;
             }
 
-            var matchVector = <number[]> vp.data.dataRepeat(0, this._recordCount);
+            var matchVector = <number[]>vp.data.dataRepeat(0, this._recordCount);
 
             var colType = this._dataFrame.getColType(colName);
             if (sp.searchRawValues)
@@ -470,12 +638,33 @@ module beachParty
                 colType = "string";
             }
 
-            var isString = (colType === "string");
+            //---- EXACT search uses original string values ----
+            var isString = (colType == "string" || searchType == bps.TextSearchType.exactMatch);
 
             if (isString)
             {
                 //---- get original data vector ----
-                var data = <any[]> this._dataFrame.getVector(colName, false);
+                var data = <any[]>this._dataFrame.getVector(colName, false);
+
+                if (! sp.caseSensitiveSearch && colType == "string")
+                {
+                    if (vp.utils.isArray(value))
+                    {
+                        for (var i = 0; i < value.length; i++)
+                        {
+                            var val = value[i];
+                            value[i] = val.toLowerCase();
+                        }
+                    }
+                    else 
+                    {
+                        value = value.toLowerCase();
+                    }
+
+                    //---- make lowercase copy of data ----
+                    var lowData = data.map((d) => d.toLowerCase());
+                    data = lowData;
+                }
             }
             else
             {
@@ -483,12 +672,12 @@ module beachParty
                 var data = <any[]>this._dataFrame.getNumericVector(colName, false).values.toArray();
             }
 
-            if (colType === "number")
+            if (colType == "number")
             {
                 value = +value;
                 maxValue = (maxValue !== null && maxValue !== undefined) ? +maxValue : value;
             }
-            else if (colType === "date")
+            else if (colType == "date")
             {
                 value = this.dateToNumber(value);
                 maxValue = (maxValue !== null && maxValue !== undefined) ? this.dateToNumber(maxValue) : value;
@@ -498,50 +687,66 @@ module beachParty
             {
                 this.searchColValueByKeys(matchVector, data, value);
             }
-            else if (searchType === bps.TextSearchType.exactMatch)
+            else if (searchType == bps.TextSearchType.exactMatch)
             {
-                this.searchExactMatch(matchVector, data, value, maxValue);
+                if (colType == "string")
+                {
+                    this.searchExactMatchString(matchVector, data, value, maxValue);
+                }
+                else
+                {
+                    this.searchExactMatchNumber(matchVector, data, value, maxValue);
+                }
             }
-            else if (searchType === bps.TextSearchType.notEqual)
+            else if (searchType == bps.TextSearchType.notEqual)
             {
                 this.searchNotEqual(matchVector, data, value, maxValue);
             }
-            else if (searchType === bps.TextSearchType.contains)
+            else if (searchType == bps.TextSearchType.contains)
             {
                 this.searchContains(matchVector, data, value, maxValue);
             }
-            else if (searchType === bps.TextSearchType.startsWith)
+            else if (searchType == bps.TextSearchType.startsWith)
             {
                 this.searchStartsWith(matchVector, data, value, maxValue);
             }
-            else if (searchType === bps.TextSearchType.greaterThan)
+            else if (searchType == bps.TextSearchType.greaterThan)
             {
                 this.searchGreaterThan(matchVector, data, value, maxValue, isString);
             }
-            else if (searchType === bps.TextSearchType.greaterThanEqual)
+            else if (searchType == bps.TextSearchType.greaterThanEqual)
             {
                 this.searchGreaterThanEqual(matchVector, data, value, maxValue, isString);
             }
-            else if (searchType === bps.TextSearchType.lessThan)
+            else if (searchType == bps.TextSearchType.lessThan)
             {
                 this.searchLessThan(matchVector, data, value, maxValue, isString);
             }
-            else if (searchType === bps.TextSearchType.lessThanEqual)
+            else if (searchType == bps.TextSearchType.lessThanEqual)
             {
                 this.searchLessThanEqual(matchVector, data, value, maxValue, isString);
             }
-            else if (searchType === bps.TextSearchType.betweenInclusive)
+            else if (searchType == bps.TextSearchType.betweenInclusive)
             {
                 this.searchBetweenInclusive(matchVector, data, value, maxValue, isString);
             }
-            else if (searchType === bps.TextSearchType.gtrValueAndLeqValue2)
+            else if (searchType == bps.TextSearchType.gtrValueAndLeqValue2)
             {
                 this.searchGtrValueAndLeqValue2(matchVector, data, value, maxValue, isString);
             }
+            else if (searchType == bps.TextSearchType.geqValueAndLessValue2)
+            {
+                this.searchGeqValueAndLessValue2(matchVector, data, value, maxValue, isString);
+            }
 
+            return matchVector;
+        }
+
+        applyMatchVector(matchVector: number[], searchAction: bps.SearchAction)
+        {
             var matches = null;
 
-            if (searchAction === bps.SearchAction.selectMatches)
+            if (searchAction == bps.SearchAction.selectMatches)
             {
                 //---- convert from list of 0/1 values to a list of "value=1" record indexes ----
                 var selectedIndexes = [];
@@ -555,7 +760,7 @@ module beachParty
 
                 this.updateSelectionFromVectorIndexes(selectedIndexes);
             }
-            else if (searchAction === bps.SearchAction.returnMatches)
+            else if (searchAction == bps.SearchAction.returnMatches)
             {
                 matches = [];
                 var dataView = this._appMgr.getDataView();
@@ -588,11 +793,21 @@ module beachParty
         }
 
         /** data can be either JSON array, map of named vectors, or text string. */
-        public setDataAndInfo(origDf: DataFrameClass, postDf: DataFrameClass, wdParams: bps.WorkingDataParams)
+        public setDataAndInfo(origDf: DataFrameClass, postDf: DataFrameClass, wdParams: bps.WorkingDataParams, loader: DataLoaderClass)
         {
             this._dataFrame = postDf;
             this._wdParams = wdParams;
             this._fn = wdParams.dataName;
+
+            postDf.registerForChange("colInfos", (e) =>
+            {
+                this._colInfos = this.buildColInfos(this._dataFrame);
+            });
+
+            if (this._colsOnDemand)
+            {
+                postDf.loader(loader);
+            }
 
             this._recordCount = postDf.getRecordCount();
 
@@ -605,7 +820,6 @@ module beachParty
             //---- build colInfos, based on SCRUBBED set of columns ----
             this._colInfos = this.buildColInfos(postDf);
 
-            this.onDataChanged("selection");
             this.onDataChanged("dataFrame");
             //this.onDataChanged("filtered");
             this.onDataChanged("colMappings");
@@ -619,6 +833,7 @@ module beachParty
             var sortOptions = new beachParty.BinSortOptionsClass();
             sortOptions.sortDirection = md.binSorting;
             sortOptions.sortByAggregateType = "count";
+            var maxCount = 0;
 
             //---- create a NamedVector object for binHelper ----
             var nv = new NamedVectors(this._recordCount);
@@ -758,27 +973,61 @@ module beachParty
             this.onSelectionChanged();
         }
 
+        getVectorFromKeys(keys: string[])
+        {
+            var vector = vp.data.dataRepeat(0, this._recordCount);
+            var pkToVectorIndex = this._dataFrame.getPkToVectorIndex();
+
+            for (var i = 0; i < keys.length; i++)
+            {
+                var pk = keys[i];
+                var vi = pkToVectorIndex[pk];
+
+                vector[vi] = 1;      
+            }
+
+            return vector;
+        }
+
         //---- set FILTERED-OUT records to the specified list of primary keys ----
         setFilter(filteredOutKeys: string[])
         {
-            if (filteredOutKeys)
+            //---- optimized for speed, so slightly complex ----
+            var isDifferent = false;
+            var newVector = null;
+            var filter = null;
+
+            var noFilter = (!filteredOutKeys || filteredOutKeys.length == 0);
+            if (noFilter)
             {
-                var filter = this.getFilteredVector(true);
-                vector.clear(filter);
+                isDifferent = (this._filteredInCount != this._recordCount);
+            }
+            else
+            {
+                //---- must convert keys to vector, and compare vectors ----
+                newVector = this.getVectorFromKeys(filteredOutKeys);
+                filter = this.getFilteredVector(false);
 
-                var pkToVectorIndex = this._dataFrame.getPkToVectorIndex();
+                isDifferent = vector.compare(filter, newVector);
+            }
 
-                for (var i = 0; i < filteredOutKeys.length; i++)
+            if (isDifferent)
+            {
+                if (!newVector)
                 {
-                    var pk = filteredOutKeys[i];
-                    var vi = pkToVectorIndex[pk];
-
-                    filter[vi] = 1;              // mark this record as "filtered out"
+                    filter = this.getFilteredVector(false);
+                    newVector = this.getVectorFromKeys(filteredOutKeys);
                 }
 
+                vector.copy(filter, newVector);
                 this.computeFilteredCount();
                 this.onDataChanged("filtered");
+
+                //---- since the filter has been changed, invalidate its numeric data cache ----
+                this._dataFrame.invalidateCache(filteredName);
             }
+
+            return isDifferent;
         }
 
         forceFilterChangedEvent()
@@ -789,23 +1038,41 @@ module beachParty
         /** sets the selection vector to the records described by "selectedPrimaryKeys", without applying any boolean operations. */
         setSelectionDirect(selectedPrimaryKeys: string[], changeSource: string)
         {
-            if (selectedPrimaryKeys)
+            var isDifferent = false;
+            var selectVector = null;
+            var newVector = null;
+
+            var noSelect = (!selectedPrimaryKeys || selectedPrimaryKeys.length == 0);
+            if (noSelect)
             {
-                var selectVector = this.getSelectedVector(true);
-                vector.clear(selectVector);
+                isDifferent = (this._selectedCount > 0);
+            }
+            else
+            {
+                //---- must convert keys to vector, and compare vectors ----
+                newVector = this.getVectorFromKeys(selectedPrimaryKeys);
+                selectVector = this.getSelectedVector(false);
 
-                var pkToVectorIndex = this._dataFrame.getPkToVectorIndex();
+                isDifferent = vector.compare(selectVector, newVector);
+            }
 
-                for (var i = 0; i < selectedPrimaryKeys.length; i++)
+            if (isDifferent)
+            {
+                if (!newVector)
                 {
-                    var pk = selectedPrimaryKeys[i];
-                    var vi = pkToVectorIndex[pk];
-
-                    selectVector[vi] = 1;              // mark this record as "selected"
+                    selectVector = this.getSelectedVector(false);
+                    newVector = this.getVectorFromKeys(selectedPrimaryKeys);
                 }
+
+                vector.copy(selectVector, newVector);
+
+                //---- since the selection has been changed, invalidate its numeric data cache ----
+                this._dataFrame.invalidateCache(selectedName);
 
                 this.onSelectionChanged(changeSource);
             }
+
+            return isDifferent;
         }
 
         isolateSelection()

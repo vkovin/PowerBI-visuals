@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    appMgr - manages and persists the app state
 //-------------------------------------------------------------------------------------
 
@@ -38,6 +38,7 @@ module beachParty
         _awaitingFirstCmd = true;       // if next cmd will be the first of an cmd/animation cycle
         _cmdExecTime = 0;
         _traceMgr: TraceMgrClass;
+        _dataCacheParams: bps.DataCacheParams = new bps.DataCacheParams();
 
         constructor(objectCache: sandDance.ObjectCache, container: HTMLElement)
         {
@@ -51,6 +52,16 @@ module beachParty
 
         public getSettingsManager(): powerbi.visuals.samples.SandDanceSettingsManager {
             return <powerbi.visuals.samples.SandDanceSettingsManager> this.objectCache.get("settingsManager");
+        }
+
+        setDataCacheParams(value: bps.DataCacheParams)
+        {
+            this._dataCacheParams = value;
+        }
+
+        isCacheWebFiles(value?: boolean)
+        {
+            return (this._dataCacheParams != null && this._dataCacheParams.cacheWebFiles);
         }
 
         init(canvas3dId: string, canvas2dId: string, svgId: string, fileInfoId: string, width: number, height: number,
@@ -132,7 +143,7 @@ module beachParty
             if (!this._isVaas)
             {
                 //---- load the DemoVote data initially ----
-                windowMgr.openKnown("demovote");
+                // windowMgr.openKnown("demovote");
 
                 this.applyAppSettings();
 
@@ -270,11 +281,12 @@ module beachParty
                     var buildChartElapsed = this._dataView.getBuildChartTime();
                     var cycleNum = this._dataView.getChart()._animCycleCount;
                     var isFirstFilterStage = this._dataView.getIsFirstFilteredStage();
+                    var scatterSize = this._dataView.getChart().getScatterShapeSizeInPixels();
 
                     this.postMessageToParent({
                         msg: key, cmdTime: cmdTime, buildChartElapsed: buildChartElapsed,
                         lastCycleFrameRate: lastCycleFrameRate, lastCycleFrameCount: lastCycleFrameCount, cycleNum: cycleNum,
-                        isFirstFilterStage: isFirstFilterStage ,
+                        isFirstFilterStage: isFirstFilterStage, maxScatterSizeInPixels: scatterSize
                     });
                 }
 
@@ -295,18 +307,18 @@ module beachParty
 
             dataMgr.registerForChange("dataFrame", (e) =>
             {
-                var key = "dataFrameLoaded";
-                var options = subscriptions[key];
-
-                if (options)
+                var wdParams = dataMgr.getPreload();
+                if (!wdParams.supressDataFrameLoadedMsgToClient)
                 {
-                    var fn = dataMgr.getFilename();
-                    var recordCount = dataMgr.getDataFrame().getRecordCount();
-                    var colInfos = (options.returnData) ? dataMgr.getColInfos(true) : null;
-                    var origColInfos = (options.returnData) ? dataMgr.getOrigColInfos() : null;
-                    var preload = (options.returnData) ? dataMgr.getPreload() : null;
+                    var key = "dataFrameLoaded";
+                    var options = subscriptions[key];
 
-                    this.postMessageToParent({ msg: key, fn: fn, recordCount: recordCount, colInfos: colInfos, origColInfos: origColInfos, preload: preload } );
+                    if (options)
+                    {
+                        var msgBlock = this.buildDataFrameLoadedMsgBlock(dataMgr);
+
+                        this.postMessageToParent(msgBlock);
+                    }
                 }
             });
 
@@ -324,32 +336,44 @@ module beachParty
             });
 
             // Selection Handler.
-            dataMgr.registerForChange("selection", (e, dataMgr: DataMgrClass, changeSource: string) =>
+            dataMgr.registerForChange("selection", (e, changeSource: string) =>
             {
                 var key = "selectionChanged";
                 var options = subscriptions[key];
 
                 if (options)
                 {
-                    //---- return the "filtered selection" (only selected records that are in the FILTERED-IN records) ----
-                    var selectedCount = dataMgr.getSelectedCount(true);
-                    var recordCount = dataMgr.getDataFrame().getRecordCount();
-                    var selectedRecords = null;
-
-                    if (options.returnData)
-                    {
-                        selectedRecords = dataMgr.getSelectedRecords(true);
-                    }
-
-                    this.postMessageToParent({
-                        msg: key,
-                        selectedCount: selectedCount,
-                        recordCount: recordCount,
-                        selectedRecords: selectedRecords,
-                        changeSource: changeSource
-                    });
+                    var msgBlock = this.buildSelectionChangedMsgBlock(dataMgr, changeSource);
+                    this.postMessageToParent(msgBlock);
                 }
             });
+
+//             dataMgr.registerForChange("selection", (e, dataMgr: DataMgrClass, changeSource: string) =>
+//             {
+//                 var key = "selectionChanged";
+//                 var options = subscriptions[key];
+// 
+//                 if (options)
+//                 {
+//                     //---- return the "filtered selection" (only selected records that are in the FILTERED-IN records) ----
+//                     var selectedCount = dataMgr.getSelectedCount(true);
+//                     var recordCount = dataMgr.getDataFrame().getRecordCount();
+//                     var selectedRecords = null;
+// 
+//                     if (options.returnData)
+//                     {
+//                         selectedRecords = dataMgr.getSelectedRecords(true);
+//                     }
+// 
+//                     this.postMessageToParent({
+//                         msg: key,
+//                         selectedCount: selectedCount,
+//                         recordCount: recordCount,
+//                         selectedRecords: selectedRecords,
+//                         changeSource: changeSource
+//                     });
+//                 }
+//             });
 
             dataMgr.registerForChange("filtered", (e) =>
             {
@@ -358,25 +382,78 @@ module beachParty
 
                 if (options)
                 {
-                    var selectedCount = dataMgr.getSelectedCount(true);
-                    var filteredInCount = dataMgr.getFilteredInCount();
-                    var recordCount = dataMgr.getDataFrame().getRecordCount();
+                    var msgBlock = this.buildFilterChangedMsgBlock(dataMgr);
 
-                    var filteredRecords = null;
-
-                    var colInfos = dataMgr.getColInfos(true);
-
-                    if (options.returnData)
-                    {
-                        filteredRecords = dataMgr.getSelectedRecords();
-                    }
-
-                    this.postMessageToParent({
-                        msg: key, colInfos: colInfos, filteredInCount: filteredInCount, recordCount: recordCount, selectedCount: selectedCount,
-                        filteredRecords: filteredRecords
-                    });
+                    this.postMessageToParent(msgBlock);
                 }
             });
+        }
+
+        buildFilterChangedMsgBlock(dataMgr: DataMgrClass)
+        {
+            var key = "filteredChanged";
+            var options = this._eventSubscriptions[key];
+
+            var selectedCount = dataMgr.getSelectedCount(true);
+            var filteredInCount = dataMgr.getFilteredInCount();
+            var recordCount = dataMgr.getDataFrame().getRecordCount();
+
+            var filteredRecords = null;
+
+            var colInfos = dataMgr.getColInfos(true);
+
+            if (options.returnData)
+            {
+                filteredRecords = dataMgr.getSelectedRecords();
+            }
+
+            var msgBlock = {
+                msg: key, colInfos: colInfos, filteredInCount: filteredInCount, recordCount: recordCount, selectedCount: selectedCount,
+                filteredRecords: filteredRecords
+            };
+
+            return msgBlock;
+        }
+
+        buildSelectionChangedMsgBlock(dataMgr: DataMgrClass, changeSource: string)
+        {
+            var key = "selectionChanged";
+            var options = this._eventSubscriptions[key];
+
+            //---- return the "filtered selection" (only selected records that are in the FILTERED-IN records) ----
+            var selectedCount = dataMgr.getSelectedCount(true);
+            var recordCount = dataMgr.getDataFrame().getRecordCount();
+            var selectedRecords = null;
+
+            if (options.returnData)
+            {
+                selectedRecords = dataMgr.getSelectedRecords(true);
+            }
+
+            var msgBlock = {
+                msg: key,
+                selectedCount: selectedCount,
+                recordCount: recordCount,
+                selectedRecords: selectedRecords,
+                changeSource: changeSource
+            };
+
+            return msgBlock;
+        }
+
+        buildDataFrameLoadedMsgBlock(dataMgr: DataMgrClass)
+        {
+            var key = "dataFrameLoaded";
+            var options = this._eventSubscriptions[key];
+
+            var fn = dataMgr.getFilename();
+            var recordCount = dataMgr.getDataFrame().getRecordCount();
+            var colInfos = (options.returnData) ? dataMgr.getColInfos(true) : null;
+            var origColInfos = (options.returnData) ? dataMgr.getOrigColInfos() : null;
+            var preload = (options.returnData) ? dataMgr.getPreload() : null;
+            
+            var msgBlock = { msg: key, fn: fn, recordCount: recordCount, colInfos: colInfos, origColInfos: origColInfos, preload: preload };
+            return msgBlock;
         }
 
         onChartMouseDown(mousePosition, e)
@@ -509,11 +586,7 @@ module beachParty
                     if (key === "reset" && value === "true")
                     {
                         //---- delete localStorage for our settings ----
-                        // if (localStorage)
-                        // {
-                        //     localStorage["appSettings"] = "";
-                        //     localStorage["controls"] = "";
-                        // }
+                        LocalStorageMgr.clearAll();
                     }
                     else if (key === "vaas" && value === "true")
                     {
@@ -562,7 +635,7 @@ module beachParty
             msgObj.visId = this._visId;
             msgObj.cmdId = this._cmdMgr._clientCmdId;
 
-            TraceMgrClass.instance.addTrace("msgToClient", msgObj.msg, TraceEventType.point);
+            addTrace("msgToClient", msgObj.msg, TraceEventType.point);
 
             var msgStr = JSON.stringify(msgObj);
 
@@ -644,27 +717,16 @@ module beachParty
 
         loadSettings()
         {
-            console.error("loadSettings");
-            
-            // if (localStorage)
-            // {
-            //     var str = localStorage["appSettings"];
-            //     if (str && str !== "")
-            //     {
-            //         this._appSettings = JSON.parse(str);
-            //     }
-            // }
+//             var str = beachParty.localStorageMgr.get(StorageType.appSettings, null, null);
+// 
+//             if (str && str != "")
+//             {
+//                 this._appSettings = JSON.parse(str);
+//             }
         }
 
         saveSettings()
         {
-            console.error("saveSettings");
-            
-            //if (localStorage)
-            //{
-            //    var str = JSON.stringify(this._appSettings);
-            //    localStorage["appSettings"] = str;
-            //}
         }
 
         updateAndSaveAppSettings()

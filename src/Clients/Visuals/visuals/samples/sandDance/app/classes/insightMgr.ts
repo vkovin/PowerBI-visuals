@@ -15,6 +15,7 @@ module beachPartyApp
     {
         static insightWidth = 140;//200;
         static insightHeight = 70;//130;
+        static fileExt = ".insights";
 
         private application: AppClass;
         private container: HTMLElement;
@@ -82,7 +83,7 @@ module beachPartyApp
             }
             else
             {
-                picker = this.application.createEnumPicker(enumType, callback);
+                picker = /*appClass.instance*/this.application.createEnumPicker(null, enumType, callback);
             }
 
             return picker;
@@ -185,12 +186,12 @@ module beachPartyApp
 
         editInsightNotes(value?: string)
         {
-            if (arguments.length === 0)
+            if (arguments.length == 0)
             {
                 return (this._editInsight) ? this._editInsight.notes : "";
             }
 
-            if (this._editInsight)
+            if (this._editInsight && this._editInsight.notes != value)
             {
                 this._editInsight.notes = value;
                 this.onDataChanged("editInsightNotes");
@@ -201,7 +202,9 @@ module beachPartyApp
         {
             if (arguments.length === 0)
             {
-                return (this._editInsight) ? bps.LoadAction[this._editInsight.loadAction] : "";
+                var action = (this._editInsight) ? bps.LoadAction[this._editInsight.loadAction] : "";
+                action = action || "none";
+                return action;
             }
 
             if (this._editInsight)
@@ -287,25 +290,33 @@ module beachPartyApp
                 {
                     this.stopPlayback();
                 }
-                else if (name === "New session")
+                else if (name == "Delete all insights")
                 {
-                    this.startNewSession();
+                    this.deleteAllInsights();
                 }
-                else if (name.startsWith("Save session"))
+                else if (name.startsWith("Save insights"))
                 {
-                    this.saveSession();
+                    this.saveInsights();
                 }
-                else if (name.startsWith("Email session"))
+                else if (name.startsWith("Email insights"))
                 {
-                    this.emailSession();
+                    this.emailInsights();
                 }
-                else if (name.startsWith("Load session"))
+                else if (name.startsWith("Load insights"))
                 {
-                    this.loadSessionLocalFile();
+                    this.loadInsights();
                 }
                 else if (name.startsWith("Load QuickTest"))
                 {
                     this.loadQuickTest();
+                }
+                else if (name.startsWith("Take snapshot"))
+                {
+                    /*appClass.instance*/this.application.onSnapshotClick(e);
+                }
+                else if (name.startsWith("Export data"))
+                {
+                    /*appClass.instance*/this.application.onExportData(e);
                 }
 
             }, true);
@@ -317,7 +328,7 @@ module beachPartyApp
                 .css("background", this.application.getSettingsManager().getPanelBackgroundColor())
                 .css("border", "1px solid transparent") ;
 
-            pm.show(rc.left + 8, rc.bottom);
+            pm.showAt(rc.left + 8, rc.bottom);
             this._contextMenu = pm;
 
             return pm;
@@ -350,7 +361,7 @@ module beachPartyApp
             }
         }
 
-        onInsightEntryRightClick(e)
+        showInsightContextMenu(e)
         {
             var insight = <InsightData> e.target.insightObj;
             if (!insight)
@@ -392,7 +403,7 @@ module beachPartyApp
                 .css("border", "1px solid transparent") ;
 
             //this.setContextMenu(pm);
-            pm.show(pt.x, pt.y + 10);
+            pm.showAt(pt.x, pt.y + 10);
             this._contextMenu = pm;
 
             //---- cancel event to prevent insight from being loaded ----
@@ -404,21 +415,20 @@ module beachPartyApp
 
         openEditInsightPanel(e, insight: InsightData)
         {
-            // var pt = vp.events.mousePosition(e);
+            var pt = vp.events.mousePosition(e);
 
             //---- make a copy of the specified insight for editing (in case we cancel, this makes it easy to reverse the changes) ----
             this._editInsight = vp.utils.copyMap(insight);
 
             this._currentPanel = buildJsonPanel(
-                this.application,
-                this.settings,
+                this.application,this.settings,
                 this.container,
                 null,
                 this,
                 "editInsight",
                 true,
-                undefined/*pt.x*/,
-                undefined/*pt.y*/,
+                pt.x,
+                pt.y,
                 undefined,
                 undefined,
                 undefined,
@@ -427,24 +437,6 @@ module beachPartyApp
                 false,
                 false,
                 true);
-
-            ////---- initialize TinyMCE rich text area to convert all textAreas into RICH text areas ----
-            //tinymce.init({ selector: 'textarea', setupcontent_callback: "myCustomSetupContent" });
-
-            ////---- tinyMCE changes our text color, so reset it now ----
-            //vp.select(".panelTextArea")
-            //    .css("visibility", "visible")
-
-            //vp.select(".mceEditorArea")
-            //    .css("font-family", "Calibri")
-            //    .css("font-size", "16px")
-            //    .css("background", "black")
-            //    .css("color", "white")
-
-            ////---- hide mce's toolbar and menubar ----
-            //vp.select(".mce-menubar").css("display", "none");
-            //vp.select(".mce-toolbar").css("display", "none");
-            //vp.select(".mce-flow-layout").css("display", "none");
 
             //---- support CLOSE of dialog as a cancel, so none of the properties changed are retained ----
             this._currentPanel.registerForChange("onAccept", (e) =>
@@ -458,7 +450,7 @@ module beachPartyApp
         {
             var sessionIndex = this._session.insights.indexOf(insight);
 
-            this.application.createInsight(true, true, (captInsight: bps.InsightData) =>
+            this.application.createInsight(bps.SnapshotType.chart, true, (captInsight: bps.InsightData) =>
             {
                 //---- transfer user properties from "insight" ----
                 captInsight.name = insight.name;
@@ -545,10 +537,22 @@ module beachPartyApp
             return fn;
         }
 
+        loadInsights()
+        {
+            LocalFileHelper.loadFile(InsightMgrClass.fileExt, (arrayBuff, fn) => 
+            {
+                var zip = new JSZip();
+                zip.load(arrayBuff, undefined);
+
+                this.loadInsightsFromZipFile(zip, fn);
+            });
+        }
+
+        //For Power BI.
         loadSessionLocalFile(forceUpdate: boolean = true)
         {
             setTimeout(() => {
-                this.loadSessionFromText(
+                this.loadInsightsFromText(
                     this.loadSettingsHandler(sandDance.SettingsType.insightSession),
                     "Power BI",
                     forceUpdate);
@@ -560,7 +564,7 @@ module beachPartyApp
             // });
         }
 
-        loadSessionFromServer(sessionUrl: string)
+        loadSessionFromServer(sessionUrl: string, callback?: any)
         {
             //var fn = this.getSharedServerRoot() + sessionId;
 
@@ -568,11 +572,17 @@ module beachPartyApp
             {
                 var fn = AppUtils.getLastNodeOfUrl(sessionUrl);
 
-                this.loadSessionFromText(text, fn);
+                this.loadInsightsFromText(text, fn);
+
+                if (callback)
+                {
+                    callback();
+                }
+
             });
         }
 
-        loadSessionFromText(text: any, fn: string, forceUpdate: boolean = true)
+        loadInsightsFromText(text: any, fn: string, forceUpdate: boolean = true)
         {
             try
             {
@@ -607,16 +617,107 @@ module beachPartyApp
             }
         }
 
-        loadQuickTest()
-        {
-            //---- read the file from server ---
-//             var url = beachParty.getMyPath() + "/tests/QuickTest.bpSession";
-//             var text = <string>beachParty.FileAccess.readFile(url, beachParty.fileFormat.text);
+//         loadInsightsFromText(text: string, fn: string)
+//         {
+//             try
+//             {
+//                 var anyObj = JSON.parse(text);
+//                 if (vp.utils.isArray(anyObj))
+//                 {
+//                     var session = new InsightSession();
+//                     session.version = .9;
 // 
-//             this.loadSessionFromText(text, "QuickTest");
+//                     session.insights = anyObj;
+//                 }
+//                 else
+//                 {
+//                     var session = <InsightSession > anyObj;
+//                     if (session.version < .9)
+//                     {
+//                         throw "Error: invalid session file";
+//                     }
+// 
+//                 }
+// 
+//                 this._session = session;
+//                 this._sessionName = this.removeExt(fn);
+// 
+//                 this.markRebuildNeeded(true);
+//             }
+//             catch (ex)
+//             {
+//                 alert("Error parsing session file: " + ex);
+//             }
+//         }
+
+        loadInsightsFromZipFile(zip: JSZip, fn: string)
+        {
+            try
+            {
+                var session = new InsightSession();
+                session.version = .92;
+
+                zip.filter((path: string, file) =>
+                {
+                    // relativePath == "readme.txt"
+                    // file = {name:"dir/readme.txt",options:{...},asText:function}
+                    vp.utils.debug("read zip: file=" + path);
+
+                    if (path.endsWith(".json"))
+                    {
+                        var jsonStr = file.asText();
+                        var insightObj = <bps.InsightData> JSON.parse(jsonStr);
+
+                        var imgFilename = path.replace("views", "images");
+                        imgFilename = imgFilename.replace(".json", ".png");
+
+                        var imgFile = zip.file(imgFilename);
+                        if (imgFile)
+                        {
+                            var byteArray = imgFile.asUint8Array();
+                            if (byteArray)
+                            {
+                                //---- CAUTION: the timing here is a bit sketchy; may cause problems ----
+                                var blobObject = new Blob([byteArray], { type: "image/png" });
+
+                                var reader = new FileReader();
+                                reader.onload = function (event)
+                                {
+                                    var str = (<any>event.target).result;
+                                    insightObj.imageAsUrl = str;
+                                };
+                                reader.readAsDataURL(blobObject);
+                            }
+                        }
+
+                        session.insights.push(insightObj);
+                    }
+
+                    return false;
+                });
+
+                this._session = session;
+                this._sessionName = this.removeExt(fn);
+
+                this.markRebuildNeeded(true);
+            }
+            catch (ex)
+            {
+                alert("Error parsing insights file: " + fn);
+            }
         }
 
-        saveSession()
+        loadQuickTest()
+        {
+//             var fn = "quickTest.insights";
+//             var arrayBuff = beachParty.fileAccess.readServerFileIntoArrayBuff("tests/" + fn);
+//             var zip = new JSZip();
+//             zip.load(arrayBuff, undefined);
+// 
+//             this.loadInsightsFromZipFile(zip, fn);
+        }
+
+        saveInsightsAsJSON()
         {
             // var str = JSON.stringify(this._session);
 
@@ -627,8 +728,45 @@ module beachPartyApp
             // this.openSessionNamePanel(this._sessionName, (sessionName) =>
             // {
             //     this._sessionName = sessionName;
-            //     LocalFileHelper.saveToLocalFile(sessionName + ".bpSession", str);
+            //     LocalFileHelper.saveToLocalFile(sessionName + this.fileExt, str);
             // });
+        }
+
+         saveInsights()
+        {
+            var zip = new JSZip();
+
+            for (var i = 0; i < this._session.insights.length; i++)
+            {
+                var insight = this._session.insights[i];
+                var name = insight.name;
+                var imgUrl = insight.imageAsUrl;
+
+                //---- for now, use a simple, unique name ----
+                name = "i" + (1+i);
+
+                //---- remove image for this step ----
+                insight.imageAsUrl = null;
+                var jsonInsight = JSON.stringify(insight);
+                insight.imageAsUrl = imgUrl;
+
+                imgUrl = imgUrl.substr(imgUrl.indexOf(',') + 1);
+
+                zip.file("views/" + name + ".json", jsonInsight);
+                zip.file("images/" + name + ".png", imgUrl, { base64: true });
+            }
+
+            this.openSessionNamePanel(this._sessionName, (sessionName) =>
+            {
+                this._sessionName = sessionName;
+                var blob = zip.generate({ type: "blob" });
+
+                LocalFileHelper.saveBlobToLocalFile(sessionName + InsightMgrClass.fileExt, blob);
+
+                //window.navigator.msSaveBlob(blob, "hello.zip");
+            });
+
+
         }
 
         //getSharedServerRoot()
@@ -636,7 +774,7 @@ module beachPartyApp
         //    return "c:\\BeachParty\\Sessions\\Shared\\Root\\";
         //}
 
-        emailSession()
+        emailInsights()
         {
             var contents = JSON.stringify(this._session);
 
@@ -652,8 +790,8 @@ module beachPartyApp
                 var appPath = beachParty.appPath();
 
                 var url = "mailto:?" +
-                    "subject=my session" +
-                    "&body=Here's a link to my BeachParty session: %0D%0A" + "%0D%0A" + "%09" +  
+                    "subject=my insights" +
+                    "&body=Here's a link to my BeachParty insights: %0D%0A" + "%0D%0A" + "%09" +  
                     appPath + "/BeachPartyApp.html?session=" + sessionId + "%0D%0A" + "%0D%0A";
 
                 vp.select(this.container, ".helperAnchor").attr("href", url);
@@ -686,7 +824,7 @@ module beachPartyApp
             }
         }
 
-        startNewSession()
+        deleteAllInsights()
         {
             this._session.insights = [];
             this._sessionName = "untitled";
@@ -840,13 +978,16 @@ module beachPartyApp
         {
             var items =
                 [
-                    // new MenuItemData("Email session...", "Sends a URL for the current session to an email recepient"),
-                    new MenuItemData("Save session...", "Saves the current session"),//Saves the current session as a file on your local machine
-                    // new MenuItemData("-"),
-                    // new MenuItemData("Load session...", "Loads a previous session from a file on your local machine"),
-                    // new MenuItemData("Load QuickTest", "Loads the session used in the BeachParty team QuickTest"),
+                    new MenuItemData("Take snapshot", "Saves a snapshot of the current view as a file on your local machine"),
+                    // new MenuItemData("Export data...", "Saves the data for the current view as a file on your local machine"),
                     new MenuItemData("-"),
-                    new MenuItemData("New session", "Starts a new BeachParty session"),
+                    // new MenuItemData("Email insights...", "Sends a URL for the current set of insights to an email recepient"),
+                    new MenuItemData("Save insights...", "Saves the current set of insights to a file on your local machine"),
+                    // new MenuItemData("-"),
+                    // new MenuItemData("Load insights...", "Loads a set of insights from a file on your local machine"),
+                    // new MenuItemData("Load QuickTest", "Loads the insights used in the BeachParty team QuickTest"),
+                    new MenuItemData("-"),
+                    new MenuItemData("Delete all insights", "Deletes all of the currently defined insights"),
 
                     //new MenuItemData("Export insights...", "Download insights as a JSON file"),
                     //new MenuItemData("Add insight...", "Add a new insight to this session"),
@@ -901,51 +1042,21 @@ module beachPartyApp
             var insightBarW = vp.select(this.container, ".insightList");
             var tip = this.getInsightTooltip(insight);
 
+            //---- add DIV to hold this insight ---
             var insightW = insightBarW.append("div")
                 .addClass("insightEntry")
                 .css("display", "block")
                 .css("position", "relative")
                 .title(tip)
                 .width(InsightMgrClass.insightWidth)
-                .height(InsightMgrClass.insightHeight + 30);
-
-            var rowW = insightW.append("div")
-                .css("position", "relative")
-                .css("top", "-6px")
-                .css("height", "30px");
-
-            var iconUrl = this.getIconUrl(insight.loadAction);
-
-            //---- type of insight ICON ----
-            var iconW = rowW.append("div")
-                .addClass("insightTypeMenuButton")
-                .addClass("clickIcon")
-                .addClass(iconUrl)
-                .css("width", "28px")
-                .css("position", "relative")
-                .css("top", "8px")
-                .css("left", "0px")
+                .height(InsightMgrClass.insightHeight + 30)
                 .attach("click", (e) =>
                 {
-                    this.onIconClick(e);
+                    this.onInsightEntryClick(e);
                 });
 
-            var insightText = rowW.append("span")
-                .addClass("insightText")
-                .text(insight.name)
-                .css("position", "relative")
-                .css("left", "-8px")
-                .css("top", "12px");
-
-            //---- hook events on this insight entry ----
-            var insightWElement = insightW.element();
-
-            insightWElement.addEventListener("click", (e) => this.onInsightEntryClick(e));
-
-            insightWElement.addEventListener("contextmenu", (e) => {
-                this.onInsightEntryRightClick(e);
-            });
-                // .attach("mousedown", (e) => this.onSelectEntry(e))
+            //---- add top row of insight (icon + title + context menu button) ----
+            var iconW = this.buildInsightTitleBar(insightW, insight);
 
             if (insight === this._currentInsight)
             {
@@ -968,6 +1079,7 @@ module beachPartyApp
                     //.css("position", "absolute")
                     //.css("left", "0px")
                     //.css("top", "0px")
+                    // .css("margin-top", "-10px")
                     .attr("src", imageAsUrl)
                     .css("background", this.settings._canvasColor)
                     .width(InsightMgrClass.insightWidth)
@@ -981,12 +1093,68 @@ module beachPartyApp
             }
 
             insightW[0].insightObj = insight;
-            iconW[0].insightObj = insight;
-            insightText[0].insightObj = insight;
-
             iconW[0].entryElem = insightW[0];
 
             this._insightEntryElems.push(insightW[0]);
+        }
+
+        buildInsightTitleBar(parentW: vp.dom.IWrapperOuter, insight: bps.InsightData)
+        {
+            var tableW = parentW.append("div").append("table")
+                .addClass("insightTitleBar")
+                .css("width", "100%")
+                .css("margin-top", "-10px")
+
+            var rowW = tableW.append("tr")
+
+            var iconUrl = this.getIconUrl(insight.loadAction);
+
+            //---- insight ICON ----
+             var tdW = rowW.append("td")
+
+             var iconW = tdW.append("div")//img
+                .id("insightTypeMenuButton")
+                .addClass("clickIcon")
+                // .attr("src", iconUrl)
+                .addClass(iconUrl)
+                .css("width", "28px")
+                .css("left", "-2px")
+                .attach("click", (e) =>
+                {
+                    this.onIconClick(e);
+                });
+
+            //---- insight NAME ----
+            var textW = rowW.append("td")
+                .addClass("insightText")
+                .text(insight.name)
+                .attach("click", (e) =>
+                {
+                    this.onInsightEntryClick(e);
+                });
+
+            iconW[0].insightObj = insight;
+            textW[0].insightObj = insight;
+
+            //---- context menu ICON ----
+            var tdW = rowW.append("td")
+                .css("text-align", "right")
+
+            var icon2W = tdW.append("div")//img
+                .id("insightContextMenuButton")
+                .addClass("clickIcon")
+                .addClass("fnInsightMenu")
+                // .attr("src", fnInsightMenu)
+                .css("width", "20px")
+                .title("open context menu for this insight")
+                .attach("click", (e) =>
+                {
+                    this.showInsightContextMenu(e);
+                });
+
+            icon2W[0].insightObj = insight;
+
+            return iconW;
         }
 
         onIconClick(e)
@@ -1036,7 +1204,7 @@ module beachPartyApp
             menuItems.push(new MenuItemData("Data", "Change this into a data loading insight", "fnInsightData"));    
             menuItems.push(new MenuItemData("View", "Change this into a view loading insight", "fnInsightView"));   
             menuItems.push(new MenuItemData("Selection", "Change this into a selection loading insight", "fnInsightSelection"));  
-            // menuItems.push(new MenuItemData("Filter", "Change this into a filter loading insight", "fnInsightFilter"));       
+            menuItems.push(new MenuItemData("Filter", "Change this into a filter loading insight", "fnInsightFilter"));       
 
             var picker = this.application.createGeneralPicker(null, "loadActionPicker", menuItems, callback, undefined/*, 28*/);
             return picker;
@@ -1062,10 +1230,10 @@ module beachPartyApp
             {
                 url = "fnInsightSelection";
             }
-            // else if (loadAction === bps.LoadAction.filter)
-            // {
-            //     url = "fnInsightFilter";
-            // }
+            else if (loadAction === bps.LoadAction.filter)
+            {
+                url = "fnInsightFilter";
+            }
 
             return url;
         }

@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    facetHelper.ts - helps layout facets into a NxM grid.
 //-------------------------------------------------------------------------------------
 
@@ -37,7 +37,7 @@ module beachParty
 
             if (this._fm.breaks && this._fm.breaks.length)
             {
-                facetCount = this._fm.breaks.length;
+                var facetCount = this._fm.breaks.length;
             }
             else if (dataType === "string")
             {
@@ -58,7 +58,7 @@ module beachParty
                 //---- number - cannot reply on this._requestedFacets - binHelperNum.createBins() might adjust (e.g., date) ----
                 //var facetCount = this._requestedFacets;
 
-                var results = BinHelperNum.createBins(nv, "facet", this._requestedFacets, null, null, null, null, fm);
+                var results = BinHelperNum.createNumBins(nv, "facet", this._requestedFacets, null, null, null, null, fm);
                 var facetCount = results.bins.length;
             }
 

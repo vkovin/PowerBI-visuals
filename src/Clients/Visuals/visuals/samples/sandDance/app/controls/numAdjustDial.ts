@@ -1,16 +1,21 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
-//    numAdjuster.ts - gauge-type control to allow numeric values to be adjusted thru rotational dragging.
+//  Copyright (c) 2016 - Microsoft Corporation.
+//    numAdjustDial.ts - gauge-type control to allow numeric values to be adjusted thru rotational dragging.
 //-------------------------------------------------------------------------------------
 
 /// <reference path="../_references.ts" />
 
 module beachPartyApp
 {
-    export class NumAdjusterClass extends beachParty.DataChangerClass
+    var gaugeCircleRadius = 50;
+
+    export class NumAdjustDial extends beachParty.DataChangerClass
     {
         private container: HTMLElement;
         private application: AppClass;
+
+        private _onMouseMove: () => any;
+        private _onMouseUp: () => any;
 
         _root: HTMLElement;
         _nameText: HTMLElement;
@@ -32,18 +37,15 @@ module beachPartyApp
         _yCircle = 0;
         _angleAdj = 0;
 
+        private _numValue: number;
         _name: string;
-        _value: number;
         _minValue: number;
-        _maxValue: number;
+        private _maxValue: number;
         _tooltip: string;
         _style: AdjusterStyle;
         _roundValues: boolean;
         _syncChanges: boolean;
         _spreadLow: boolean;
-
-        _onMouseMove: () => any;
-        _onMouseUp: () => any;
 
         /** if "syncChanges" is true, a dataChanged event on "value" is issued whenever the numAdjuster value is changed.  if false,
         event is only triggered on mouse up. */
@@ -55,7 +57,7 @@ module beachPartyApp
             this.application = application;
             this.container = container;
 
-            this._value = initialValue;
+            this._numValue = initialValue;
             this._minValue = minValue;
             this._maxValue = maxValue;
             this._tooltip = tooltip;
@@ -66,7 +68,7 @@ module beachPartyApp
             this._spreadLow = spreadLow;
 
             //---- adjust ROOT ----
-            var root = vp.select(this.container, "." + rootName)//facetBins
+            var root = vp.select(this.container, "." + rootName)
                 .addClass("numAdjuster")
                 .title(tooltip)
                 .css("position", "relative")    
@@ -78,6 +80,7 @@ module beachPartyApp
                 });
 
             this._root = root[0];
+            (<any>this._root).control = this;
 
             this.buildControlParts(root);
 
@@ -93,24 +96,54 @@ module beachPartyApp
             this._onMouseUp = this.onMouseUp.bind(this);
         }
 
+        minValue(value?: number)
+        {
+            if (arguments.length == 0)
+            {
+                return this._minValue;
+            }
+
+            this._minValue = value;
+            this.onDataChanged("minValue");
+        }
+
+        maxValue(value?: number)
+        {
+            if (arguments.length == 0)
+            {
+                return this._maxValue;
+            }
+
+            this._maxValue = value;
+            this.onDataChanged("maxValue");
+        }
+
         getRoot()
         {
             return this._root;
         }
 
-        value(value?: number)
+        value(value?: number, notifyChanged?: boolean)
         {
             if (arguments.length === 0)
             {
-                return this._value;
+                return this._numValue;
             }
 
-            value = Math.max(this._minValue, Math.min(this._maxValue, value));
+            //vp.utils.debug("numAdjuster.value(): value=" + value + ", _value=" + this._numValue);
 
-            this._value = value;
-            this.updateValueText();
+            if (value != this._numValue)
+            {
+                value = Math.max(this._minValue, Math.min(this._maxValue, value));
 
-            this.onDataChanged("value");
+                this._numValue = value;
+                this.updateValueText();
+
+                if (notifyChanged)
+                {
+                    this.onDataChanged("value");
+                }
+            }
         }
 
         buildControlParts(root: vp.dom.IWrapperOuter)
@@ -131,65 +164,64 @@ module beachPartyApp
             var bottomData = { valueX: 8, valueY: 14, minX: 32, minY: 28, maxX: 32, maxY: 9, ptX: 19, ptY: 31, angle: -90, nameY: -8 };
 
             var inPanel = false;
-            var backgrondClassName = "";
+            var fnImg = null;
             var data = null;
 
-            if (this._style === AdjusterStyle.left)
+            if (this._style == AdjusterStyle.left)
             {
                 data = leftData;
-                backgrondClassName = "fnAdjustDialLeft";
+                fnImg = "fnAdjustDialLeft";//fnAdjustDialLeft;
             }
-            else if (this._style === AdjusterStyle.top)
+            else if (this._style == AdjusterStyle.top)
             {
                 data = topData;
-                backgrondClassName = "fnAdjustDialTop";
+                fnImg = "fnAdjustDialTop";//fnAdjustDialTop;
             }
-            else if (this._style === AdjusterStyle.right)
+            else if (this._style == AdjusterStyle.right)
             {
                 data = rightData;
-                backgrondClassName = "fnAdjustDialRight";
+                fnImg = "fnAdjustDialRight";//fnAdjustDialRight;
             }
-            else if (this._style === AdjusterStyle.bottom)
+            else if (this._style == AdjusterStyle.bottom)
             {
                 data = bottomData;
-                backgrondClassName = "fnAdjustDialBottom";
+                fnImg = "fnAdjustDialBottom";//fnAdjustDialBottom;
             }
-            else if (this._style === AdjusterStyle.bottomInPanel)
+            else if (this._style == AdjusterStyle.bottomInPanel)
             {
                 data = bottomInPanelData;
-                backgrondClassName = "fnAdjustDialBottom";
+                fnImg = "fnAdjustDialBottom";//fnAdjustDialBottom;
                 inPanel = true;
             }
-            else if (this._style === AdjusterStyle.topInPanel)
+            else if (this._style == AdjusterStyle.topInPanel)
             {
                 data = topInPanelData;
-                backgrondClassName = "fnAdjustDialTop";
+                fnImg = "fnAdjustDialTop";//fnAdjustDialTop;
                 inPanel = true;
             }
 
             //---- add SEMI-CIRCLE image ----
             var styleForImg = this._style;
-            if (this._style === AdjusterStyle.bottomInPanel)
+            if (this._style == AdjusterStyle.bottomInPanel)
             {
                 styleForImg = AdjusterStyle.bottom;
             }
-            else if (this._style === AdjusterStyle.topInPanel)
+            else if (this._style == AdjusterStyle.topInPanel)
             {
                 styleForImg = AdjusterStyle.top;
             }
 
-            var imgW = root.append("div") //img
+           var imgW = root.append("div") //img
                 .addClass("numAdjusterImg")
-                .addClass(backgrondClassName)
-                .addClass("fnAdjustDial")
-                //.attr("src", backgrondClassName)
+                .addClass(fnImg)
+                // .attr("src", fnImg)
                 // .css("width", "40px")
                //.css("text-align", "center")
                 .attach("dragstart", function (e)
                 {
                     //---- prevent drag of icon ----
                     e.preventDefault();
-                });
+                })
 
             //---- add NAME ----
             var nameW = root.append("span")
@@ -198,20 +230,20 @@ module beachPartyApp
                 .css("position", "relative")
                 .css("top", data.nameY + "px")          // "-4px")
                 .css("width", "40px")
-                .css("text-align", "center");
+                .css("text-align", "center")
 
             //---- add VALUE TEXT ----
             var valueW = root.append("span")
                 .addClass("numAdjusterValue")
-                .text(this._value + "")
+                .text(this._numValue + "")
                 .css("position", "absolute")
                 .css("left", data.valueX + "px")
-                .css("top", data.valueY + "px");
+                .css("top", data.valueY + "px")
 
-            if (this._style === AdjusterStyle.topInPanel || this._style === AdjusterStyle.bottomInPanel)
+            if (this._style == AdjusterStyle.topInPanel || this._style == AdjusterStyle.bottomInPanel)
             {
                 valueW
-                    .addClass("numAdjusterInPanel");
+                    .addClass("numAdjusterInPanel")
             }
 
             this._xCircle = data.ptX;
@@ -219,9 +251,9 @@ module beachPartyApp
             this._angleAdj = data.angle;
 
             //---- add DRAG LINE ----
-            var lineW = root.append("span")
+            var lineW = vp.select(document.body).append("span")
                 .addClass("numAdjusterLine")
-                .css("position", "absolute");
+                .css("position", "absolute")
 
             this._imgCircle = imgW[0];
             this._nameText = nameW[0];
@@ -235,6 +267,11 @@ module beachPartyApp
             vp.select(this._root).css("display", (value) ? "inline-block" : "none");
         }
 
+        isShowing()
+        {
+            return (vp.select(this._root).css("display") != "none");
+        }
+
         /** if user clicked on left side of circle, decrement count by 1; otherwise, increment count by 1. */
         onClickInCircle(e)
         {
@@ -245,13 +282,13 @@ module beachPartyApp
             if (pt.x >= 0 && pt.x < w)
             {
                 var delta = (pt.x < w / 2) ? -1 : 1;
-                this.value(this._value + delta);
+                this.value(this._numValue + delta, true);
             }
         }
 
         positionLine(p1, p2)
         {
-            var rc = vp.dom.getBounds(this._imgCircle, true);
+            var rc = vp.dom.getBounds(this._imgCircle);
 
             var xdiff = p2.x - p1.x;
             var ydiff = p2.y - p1.y;
@@ -273,15 +310,15 @@ module beachPartyApp
                 .css("width", width + "px")
                 .css("left", left + "px")
                 .css("top", top + "px")
-                .transform(rotateStr);
+                .transform(rotateStr)
         }
 
         updateValueText()
         {
-            var value = this._value;
-
-            var str = vp.formatters.comma(value);
+            var str = vp.formatters.comma(this._numValue);
             vp.dom.text(this._valueText, str);
+
+            //vp.utils.debug("numAdjuster.updateValueText: str=" + str);
         }
 
         onMouseDown(e)
@@ -295,9 +332,9 @@ module beachPartyApp
                 this._ptDown = vp.events.mousePosition(e);
 
                 vp.select(this._valueText)
-                    .addClass("numAdjusterActiveValue");
+                    .addClass("numAdjusterActiveValue")
 
-                // vp.events.setCaptureWindow((e) => this.onMouseMove(e), (e) => this.onMouseUp(e)/*, ["myChart"]*/);
+                // vp.events.setCaptureWindow((e) => this.onMouseMove(e), (e) => this.onMouseUp(e), ["myChart"]);
 
                 let sandDanceElement = vp.select(this.container);
 
@@ -326,7 +363,7 @@ module beachPartyApp
                     if (Math.max(xd, yd) >= 3)
                     {
                         this._isDragging = true;
-                        this._valueAtStartOfDrag = this._value;
+                        this._valueAtStartOfDrag = this._numValue;
                     }
                 }
 
@@ -339,7 +376,7 @@ module beachPartyApp
 
                     vp.select(this._draggingLine)
                     //.to(pt.x, pt.y)
-                        .css("display", "block");
+                        .css("display", "block")
 
                     //---- calculate angle from pt to center of circle ----
                     var theta = Math.atan2(yDiff, xDiff);
@@ -402,14 +439,7 @@ module beachPartyApp
                 value = vp.data.clamp(value, this._minValue, this._maxValue);
             }
 
-            this._value = value;
-
-            this.updateValueText();
-
-            if (this._syncChanges)
-            {
-                this.onDataChanged("value");
-            }
+            this.value(value, this._syncChanges);
         }
 
         setNextMsgDelay()
@@ -427,23 +457,21 @@ module beachPartyApp
             this._isDragging = false;
             this._isMouseDown = true;
 
-            // vp.events.releaseCaptureWindow();
-
             let sandDanceElement = vp.select(this.container);
 
             sandDanceElement.detach("mousemove", this._onMouseMove);
             sandDanceElement.detach("mouseup", this._onMouseUp);
 
-            vp.events.cancelEventDefault(e);
-
             vp.select(this._valueText)
-                .removeClass("numAdjusterActiveValue");
+                .removeClass("numAdjusterActiveValue")
 
             vp.select(this._draggingLine)
-                .css("display", "none");
+                .css("display", "none")
 
             this.onDataChanged("value");
             this.onDataChanged("valueMouseUp");
+
+            //vp.utils.debug("numAdjuster.onMouseUp: onDataChanges('value') called - this._value=" + this._numValue);
         }
 
         hookEvents()

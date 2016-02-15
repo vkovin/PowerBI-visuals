@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    baseVis.ts - base class for webGL based visualzations.
 //-------------------------------------------------------------------------------------
 
@@ -18,8 +18,23 @@ module beachParty
     // Chart Layout rules:
     //     see scaterPlot.ts
     //------------------------------------
+
+    //-------------------------------------------------------------------------------------------
+    // ideas for making this class smaller (current size: 4200 lines):
+    //  - programMgr    - handles the gl program & shaders
+    //  - buildMgr      - handles the "build chart" process
+    //  - textureMgr    - handles all apsects of textures
+    //  - uniformMgr    - handles the creation and setting of gl uniform variables
+    //  - hitTestMgr    - handles all hit-testing
+    //  - frameMgr      - handles all animation cycle stuff (moveFrame, drawFrame)
+    //  - perfMgr       - handles all perf timing/reporting
+    //-------------------------------------------------------------------------------------------
+
     export class BaseGlVisClass extends DataChangerClass      //implements IDataViewer
     {
+        //---- managers (these help divide up the work done by this class) ---- 
+        private _bufferMgr: BufferMgrClass; 
+
         private appMgr: AppMgrClass;
         private container: HTMLElement;
 
@@ -31,6 +46,7 @@ module beachParty
 
         //---- CONTEXT ----
         private _gl: WebGLRenderingContext = null;
+        private _glInst: ANGLE_instanced_arrays;
         private _ctx: CanvasRenderingContext2D;
         private _tm: bps.TextMappingData;
         private _lm: bps.LineMappingData;
@@ -45,7 +61,7 @@ module beachParty
         _mostRecentTexture: WebGLTexture;
         _mostRecentTextureCount = 0;
         _needTextureSwap = false;
-        _imageMappingPalette: string[];
+        _shapeMappingPalette: string[];
         _texPalette: string[];
 
         //---- COLOR palette ----
@@ -56,6 +72,7 @@ module beachParty
         _maxColors = 2;
         _maxColors2 = 2;
         private _primaryColorCount = 0;
+        private _isChannelLast = false;
 
         //---- PER SHAPE stuff ----
         private _layoutResults = <LayoutResult[]>[];                // for building chart repro data (stored in Insights)
@@ -69,27 +86,27 @@ module beachParty
         private _buildBoundingBoxes = true;
 
         //---- GL ATTRIBUTES ----
-        _vertexCount = 0;
+        //_vertexCount = 0;
         private _verticesPerRecord = 1;
         private _lastVerticesPerRecord: number = null;
-        _glAttributes: IAttributes = null;     
 
         //---- BUFFERS ----
-        _usingPrimaryBuffers = true;
         _drawPrimitive: bps.DrawPrimitive;              // set from view
-        _usingPointCubes = false;
-        _fromBuffersHaveData = false;
+        //_usingPointCubes = false;
         _drawOrderKey = "none";
+        _drawInfos: DrawInfo[]; 
 
         //---- CHART stuff ----
         _chartOptions: any;
         _chartClass: string;
         _prevChartClass: string;
         _chartFrameHelper: ChartFrameHelperClass;
-        _hideAxes = false;
+        _hideAxes = <any> false;
         _gridLinesBuffer = null;
         _view: DataViewClass;
         private _svgChartGroup: SVGGElement;
+        _requestedChartName: string;                // e.g., "cluster" when chart is a scatterPlot
+        _prepassDc: DrawContext;                    // draw context captured during prepass (for use by subsequent transforms that need to rebuild chartFrame)
 
         //---- UNIFORM (shader constants) ----
         private _uniforms: any = {};
@@ -168,7 +185,7 @@ module beachParty
         _isLastDrawOfCycle = false;
 
         //---- FACETS ----
-        private _facetHelper: FacetHelperClass = null;
+        public _facetHelper: FacetHelperClass = null;
         _facetLabelRects = [];
 
         //---- misc LAST flags ----
@@ -202,7 +219,6 @@ module beachParty
         _frameCount = 0;
         _frameRate = 0;
         _renderCount = 0;
-        _arrayMemory = 0;
         _moveFrameCount = 0;
         _drawFrameCount = 0;
         _cycleFrameCount = 0;
@@ -228,6 +244,11 @@ module beachParty
 
             this.applyChartState(chartState);
 
+            if (this._bufferMgr)
+            {
+                this._bufferMgr._baseGlVis = this;
+            }
+
             if (!this._boundingBoxMgr)
             {
                 this._boundingBoxMgr = new BoundingBoxMgrClass();
@@ -237,6 +258,11 @@ module beachParty
 
             this._dataMgr = view.getDataMgr();
             this._svgChartGroup = view.getSvgChartGroup();
+
+            if (!this._bufferMgr)
+            {
+                this._bufferMgr = new BufferMgrClass(this._gl, this._glInst, this._dataMgr, this);
+            }
 
             this.registerForEvents();
 
@@ -259,23 +285,15 @@ module beachParty
 
             //this.buildAndUseGlProgram();
 
-            this.onDrawPrimitiveChanged(false, true);
+            this.onDrawPrimitiveChanged(false, false);      // true);
 
-            if (!this._glAttributes)
-            {
-                this.createGlAttributes();
-            }
+            this._bufferMgr.createGlAttributes(this._shapesProgram, false);
 
             this.createGlUniforms();
             this.onBoundsOrCameraChanged();
 
             this.onFacetsChanged();
             this.onAnimationDataChanged();
-
-            //---- TODO: sort when using blending and 3D objects ----
-            //---- for now, turn off blending if we are using 3D lighting ----
-            var lightParams = <bps.Lighting> view.lightingParams();
-            this._isBlendingEnabled = (!lightParams.isLightingEnabled);
 
             //---- start the first build of the chart ----
             if (!this._dataFrame)
@@ -291,6 +309,7 @@ module beachParty
 
         private registerForEvents()
         {
+            var view = this._view;
             this._view.registerForRemovableChange("shapeOpacity", this, () => this.onShapeOpacityChanged());
             this._view.registerForRemovableChange("textOpacity", this, () => this.onShapeOpacityChanged());
             this._view.registerForRemovableChange("canvasColor", this, () => this.onCanvasColorChanged());
@@ -298,6 +317,7 @@ module beachParty
             this._view.registerForRemovableChange("animationData", this, () => this.onAnimationDataChanged());
             this._view.registerForRemovableChange("chartFrameData", this, () => this.markBuildNeeded("chartFrameData"));
             this._view.registerForRemovableChange("shapeImageName", this, () => this.checkForTexPaletteChanged());
+            this._view.registerForRemovableChange("isShapeImageEnabled", this, () => this.markDrawNeeded("isShapeImageEnabled"));
             this._view.registerForRemovableChange("sizeFactor", this, () => this.onSizeFactorChanged());
             this._view.registerForRemovableChange("sizeFactorWithAnimation", this, () => this.markBuildNeeded("sizeFactorWithAnimation"));
             this._view.registerForRemovableChange("separationFactor", this, () => this.markBuildNeeded("separationFactor"));
@@ -309,12 +329,16 @@ module beachParty
             this._view.registerForRemovableChange("sizeMapping", this, () => this.markBuildNeeded("sizeMapping"));
             this._view.registerForRemovableChange("textMapping", this, () => this.markBuildNeeded("textMapping"));
             this._view.registerForRemovableChange("lineMapping", this, () => this.markBuildNeeded("lineMapping"));
+            this._view.registerForRemovableChange("flatParams", this, () => this.markBuildNeeded("flatParams"));
+            this._view.registerForRemovableChange("spiralParams", this, () => this.markBuildNeeded("spiralParams"));
+            this._view.registerForRemovableChange("customParams", this, () => this.markBuildNeeded("customParams"));
             this._view.registerForRemovableChange("facetMapping", this, () => this.onFacetsChanged());
-            this._view.registerForRemovableChange("imageMapping", this, () => this.onImageMappingChanged());
+            this._view.registerForRemovableChange("shapeMapping", this, () => this.onShapeMappingChanged());
 
             this._view.registerForRemovableChange("xMapping", this, () => this.onColMappingsChanged());
             this._view.registerForRemovableChange("yMapping", this, () => this.onColMappingsChanged());
             this._view.registerForRemovableChange("zMapping", this, () => this.onColMappingsChanged());
+            this._view.registerForRemovableChange("auxMapping", this, () => this.onColMappingsChanged());
 
             this._view.registerForRemovableChange("toPercentOverride", this, () => this.onToPercetOverrideChanged());
 
@@ -331,6 +355,7 @@ module beachParty
             this._view.getTransformMgr().registerForRemovableChange("uiOpStart", this, () => this.onUiOp(true));
             this._view.getTransformMgr().registerForRemovableChange("uiOpStop", this, () => this.onUiOp(false));
             this._view.registerForRemovableChange("drawingPrimitive", this, () => this.onDrawPrimitiveChanged(true, false));
+            this._view.registerForRemovableChange("glInst", this, () => this.onDrawPrimitiveChanged(true, false));
             this._view.registerForRemovableChange("isCullingEnabled", this, () => this.computeCulling());
             this._view.registerForRemovableChange("hoverPrimaryKey", this, () => this.markDrawNeeded("hoverPrimaryKey"));
             this._view.registerForRemovableChange("lightingParams", this, () => this.markDrawNeeded("lightingParams"));
@@ -431,17 +456,17 @@ module beachParty
             this.markBuildNeeded("onCanvasColorChanged");
         }
 
-        onImageMappingChanged()
+        onShapeMappingChanged()
         {
             var newPalette: string[] = null;
 
-            var im = this._view.imageMapping();
+            var im = this._view.shapeMapping();
             if (im && im.colName)
             {
                 newPalette = im.imagePalette;
             }
 
-            this._imageMappingPalette = newPalette;
+            this._shapeMappingPalette = newPalette;
 
             this.checkForTexPaletteChanged();
         }
@@ -452,10 +477,10 @@ module beachParty
         {
             var texPalette = null;
 
-            //---- imageMappingPalette takes priority ----
-            if (this._imageMappingPalette && this._imageMappingPalette.length)
+            //---- shapeMappingPalette takes priority ----
+            if (this._shapeMappingPalette && this._shapeMappingPalette.length)
             {
-                texPalette = this._imageMappingPalette;
+                texPalette = this._shapeMappingPalette;
             }
             else
             {
@@ -526,7 +551,7 @@ module beachParty
             /// webGL bug/misunderstanding workaround: seems that creating a new webGL texture somehow corrupts the existing texture activations, so we 
             /// always reactive the existing textures here.
 
-            if (this._usingPrimaryBuffers)
+            if (this.isUsingPrimaryBuffers())
             {
                 //---- move NEW texture to texture1 ----
                 this._texture1 = newTexture;
@@ -575,7 +600,11 @@ module beachParty
             //this.markBuildNeeded();
             //this._omitAnimOnNextBuild = true;
 
+            //---- this just does a single draw ----
             this.markDrawNeeded("onShapeOpacityChanged");
+
+            //---- update this instantly since we will only draw a single frame ----
+            this._opacityLast = this._view.shapeOpacity();
         }
 
         onFacetsChanged()
@@ -641,13 +670,9 @@ module beachParty
         clearInvalidMapping(md: bps.MappingData, dataFrame: DataFrameClass)
         {
             var colName = md.colName;
-            if (colName)
+            if (colName && ! dataFrame.isColumnName(colName))
             {
-                var vector = dataFrame.getVector(colName, false);
-                if (!vector)
-                {
-                    md.colName = null;
-                }
+                md.colName = null;
             }
         }
 
@@ -665,7 +690,7 @@ module beachParty
             this.clearInvalidMapping(view.sizeMapping(), dataFrame);
             this.clearInvalidMapping(view.textMapping(), dataFrame);
             this.clearInvalidMapping(view.lineMapping(), dataFrame);
-            this.clearInvalidMapping(view.imageMapping(), dataFrame);
+            this.clearInvalidMapping(view.shapeMapping(), dataFrame);
             this.clearInvalidMapping(view.facetMapping(), dataFrame);
         }
 
@@ -792,7 +817,7 @@ module beachParty
             var newColors = this.adjustColorPaletteForSelection(colorNames);
             this._colorPalette = newColors;
 
-            if (this._usingPrimaryBuffers)
+            if (this.isUsingPrimaryBuffers())
             {
                 this._colorFloats = glUtils.colorNamesOrValuesToFloats(newColors);
 
@@ -948,12 +973,25 @@ module beachParty
             return this._transformer;
         }
 
+        is3dChart()
+        {
+            var name = this._chartClass;
+            return (name == "scatterPlot3dClass" || name == "stacksBinClass");
+        }
+
         buildNonLayoutStuff()
         {
-            vp.utils.debug("buildNonLayoutStuff: this._usingPrimaryBuffers=" + this._usingPrimaryBuffers);
+            //---- TODO: sort when using blending and 3D objects ----
+            //---- for now, turn off blending if are in a 3D chart ----
+            var lightParams = <bps.Lighting>this._view.lightingParams();
+            this._isBlendingEnabled = (!this.is3dChart());
+
+            var usingPrimary = this.isUsingPrimaryBuffers();
+
+            //vp.utils.debug("buildNonLayoutStuff: this._usingPrimaryBuffers=" + usingPrimary);
 
             //---- clear shapes in our svg group (for facet borders, axes, etc) ----
-            vp.select(this._svgChartGroup)//TODO: important!
+            vp.select(this._svgChartGroup)
                 .clear();
 
             this.buildTexture();
@@ -970,31 +1008,38 @@ module beachParty
                 //this._uniformsChanged.matrix = true;
             }
 
+            var forceVisualBreak = false;
+
             if (this._refreshData || (! this._dataFrame))
             {
+                var oldCount = (this._dataFrame) ? this._dataFrame.getRecordCount() : 0;
+
                 this._dataFrame = this._dataMgr.getDataFrame();
                 this._maxRecords = null;
+
+                var recordCount = this._dataFrame.getRecordCount();
 
                 this.onDataOrPrimitiveChanged(true);
 
                 //---- is ALL this needed when we change data? ----
-                this.createGlAttributes();
+                this._bufferMgr.createGlAttributes(this._shapesProgram, true);
                 this.createGlUniforms();
 
                 //---- clear hover index ----
                 this._view.hoverPrimaryKey(null);
 
                 this._rebuildAttrBuffers = true;
+                forceVisualBreak = true;
             }
+
+            this._view.ensureColumnsAreLoaded();
 
             //---- NOTE: the boundingBoxes only hold FILTERED-IN shapes - you cannot find shapes directly using "vectorIndex" for them ----
             var filteredInCount = this._dataMgr.getFilteredInCount();
             this._boundingBoxMgr.adjustSizeAndClearList(filteredInCount);
 
-            if (this._rebuildAttrBuffers || (this._glAttributes && !this._glAttributes.xyz._array))
-            {
-                this.createAttributeBuffers();
-            }
+            this._bufferMgr.createAttributeArraysIfNeeded(this._rebuildAttrBuffers, forceVisualBreak);
+
         }
 
         buildChart()
@@ -1003,13 +1048,18 @@ module beachParty
 
             var buildId = this._nextBuildId++;
 
-            TraceMgrClass.instance.addTrace("chartBuild", this._chartClass, TraceEventType.start, "b" + buildId);
+            addTrace("chartBuild", this._chartClass, TraceEventType.start, "b" + buildId);
 
             //---- normal build starts here ----
-            vp.utils.debug("----- buildChart ---------");
+            //vp.utils.debug("----- buildChart ---------");
             var buildStart = vp.utils.now();
 
             this._view.onBuildStarted();
+
+            //vp.utils.debug("buildChart() starting; this._refreshData=" + this._refreshData + ", this._isSelectionChangeOnly = "
+            //    + this._isSelectionChangeOnly);
+
+            var appMgr = this._view.getAppMgr();
 
             try
             {
@@ -1030,7 +1080,7 @@ module beachParty
                 this._firstChartBuilt = true;
                 //this._rebuildTexture = false;
 
-                TraceMgrClass.instance.addTrace("chartBuild", this._chartClass, TraceEventType.end, "b" + buildId);
+                addTrace("chartBuild", this._chartClass, TraceEventType.end, "b" + buildId);
             }
 
             this.addToBuildPerf("total", buildStart);
@@ -1038,11 +1088,15 @@ module beachParty
 
         onDrawPrimitiveChanged(needBufferRebuild: boolean, needProgramBuild: boolean)
         {
+            //---- refresh glInst for this build =---
+            this._glInst = this._view.getInstancingExt();
+            this._bufferMgr.glInst(this._glInst);
+
             var value = bps.DrawPrimitive[this._view.drawingPrimitive()];
             this._drawPrimitive = value;
 
-            var usePointCubes = false;
-            this._usingPointCubes = (this._drawPrimitive === bps.DrawPrimitive.point && usePointCubes);
+            //var usePointCubes = false;
+            //this._usingPointCubes = (this._drawPrimitive == bps.DrawPrimitive.point && usePointCubes);
 
             this.computeCulling();
 
@@ -1087,7 +1141,7 @@ module beachParty
             //vp.utils.debug("markBuildNeeded called: reason=" + reason);
             this._markBuildNeededCount++;
 
-            TraceMgrClass.instance.addTrace("buildNeeded", reason, TraceEventType.point);
+            addTrace("buildNeeded", reason, TraceEventType.point);
 
             if (this._view.isAutoRebuild())
             {
@@ -1104,7 +1158,7 @@ module beachParty
 
                 if (this._isCycleActive)
                 {
-                    TraceMgrClass.instance.addTrace("animInterrupt", this._chartClass, TraceEventType.point);
+                    addTrace("animInterrupt", this._chartClass, TraceEventType.point);
 
                     //---- terminate the current cycle so we can draw with new settings ----
                     this.onEndOfCycle(vp.utils.now() - this._lastFrameTime);
@@ -1148,33 +1202,7 @@ module beachParty
 
         getArrayMemory()
         {
-            return this._arrayMemory;
-        }
-
-        createGlAttributes()
-        {
-            var gl = this._gl;
-            var program = this._shapesProgram;
-            var attrs = {};
-            this._glAttributes = attrs;
-
-            glUtils.addAttribute(attrs, gl, program, "xyz", 3);
-            glUtils.addAttribute(attrs, gl, program, "xyz2", 3);
-            glUtils.addAttribute(attrs, gl, program, "size", 3);
-            glUtils.addAttribute(attrs, gl, program, "size2", 3);
-            glUtils.addAttribute(attrs, gl, program, "colorIndex", 1);
-            glUtils.addAttribute(attrs, gl, program, "colorIndex2", 1);
-            glUtils.addAttribute(attrs, gl, program, "imageIndex", 1);
-            glUtils.addAttribute(attrs, gl, program, "imageIndex2", 1);
-            glUtils.addAttribute(attrs, gl, program, "opacity", 1);
-            glUtils.addAttribute(attrs, gl, program, "opacity2", 1);
-            glUtils.addAttribute(attrs, gl, program, "theta", 1);
-            glUtils.addAttribute(attrs, gl, program, "theta2", 1);
-
-            //---- for these, we only have a single buffer ----
-            glUtils.addAttribute(attrs, gl, program, "staggerOffset", 1);
-            glUtils.addAttribute(attrs, gl, program, "vertexId", 1);
-            glUtils.addAttribute(attrs, gl, program, "vectorIndex", 1);
+            return this._bufferMgr.getArrayMemoryUsage();
         }
 
         createGlUniforms()
@@ -1193,26 +1221,27 @@ module beachParty
             glUtils.addUniform(uniforms, gl, program, "colorPalette2", "3fv", this._colorFloats2);
             glUtils.addUniform(uniforms, gl, program, "isColorDiscrete", "1f");
             glUtils.addUniform(uniforms, gl, program, "isColorDiscrete2", "1f");
+            glUtils.addUniform(uniforms, gl, program, "isColorDirect", "1f");
+            glUtils.addUniform(uniforms, gl, program, "isColorDirect2", "1f");
 
-            if (this._usingPointCubes)
-            {
-                glUtils.addUniform(uniforms, gl, program, "canvasSize", "2f");
-                glUtils.addUniform(uniforms, gl, program, "szCanvas", "2f");
-                glUtils.addUniform(uniforms, gl, program, "ndcZ", "1f");
-                glUtils.addUniform(uniforms, gl, program, "cameraPos", "3fv");
+            //if (this._usingPointCubes)
+            //{
+            //    glUtils.addUniform(uniforms, gl, program, "canvasSize", "2f");
+            //    glUtils.addUniform(uniforms, gl, program, "szCanvas", "2f");
+            //    glUtils.addUniform(uniforms, gl, program, "ndcZ", "1f");
+            //    glUtils.addUniform(uniforms, gl, program, "cameraPos", "3fv");
 
-                glUtils.addUniform(uniforms, gl, program, "mvpMatrix", "matrix4fv");
-                glUtils.addUniform(uniforms, gl, program, "worldMatrix", "matrix4fv");
-            }
-            else
+            //    glUtils.addUniform(uniforms, gl, program, "mvpMatrix", "matrix4fv");
+            //    glUtils.addUniform(uniforms, gl, program, "worldMatrix", "matrix4fv");
+            //}
+            //else
             {
                 glUtils.addUniform(uniforms, gl, program, "cubeVertices", "3fv", cubeMesh.vertices);
                 glUtils.addUniform(uniforms, gl, program, "cubeNormals", "3fv", cubeMesh.vertexNormals);
                 glUtils.addUniform(uniforms, gl, program, "cubeTexCoords", "2fv", cubeMesh.uvFrontOnly);
                 glUtils.addUniform(uniforms, gl, program, "cubeTriangles", "1fv", cubeMesh.triangles);
 
-                var dpv = (this._drawPrimitive === bps.DrawPrimitive.point) ? 1.0 : 0.0;
-                glUtils.addUniform(uniforms, gl, program, "drawingPoints", "1f", dpv);
+                glUtils.addUniform(uniforms, gl, program, "drawingPoints", "1f");
 
                 glUtils.addUniform(uniforms, gl, program, "ambientFactor", "1f");
                 glUtils.addUniform(uniforms, gl, program, "lightFactor1", "1f");        // set in view
@@ -1243,8 +1272,8 @@ module beachParty
 
             glUtils.addUniform(uniforms, gl, program, "usingTexture1", "1f", -1);
             glUtils.addUniform(uniforms, gl, program, "usingTexture2", "1f", -1);
-            glUtils.addUniform(uniforms, gl, program, "uSampler1", "li", 0);
-            glUtils.addUniform(uniforms, gl, program, "uSampler2", "li", 1);
+            glUtils.addUniform(uniforms, gl, program, "uSampler1", "1i", 0);
+            glUtils.addUniform(uniforms, gl, program, "uSampler2", "1i", 1);
             glUtils.addUniform(uniforms, gl, program, "textureCount1", "1f", 0);
             glUtils.addUniform(uniforms, gl, program, "textureCount2", "1f", 0);
 
@@ -1272,29 +1301,53 @@ module beachParty
             return result;
         }
 
+        getTotalVertexCount()
+        {
+            var recordCount = this._dataMgr.getDataFrame().getRecordCount();
+            var verticesPerRecord = this.getNumVerticesInBuffer();
+            var vertexCount = recordCount * verticesPerRecord;
+
+            return vertexCount;
+        }
+
+        setLastVerticesPerRecord()
+        {
+            this._lastVerticesPerRecord = this.getNumVerticesInBuffer();
+        }
+
+        getLastVerticesPerRecord()
+        {
+            return this._lastVerticesPerRecord;
+        }
+
+        getPkToDrawIndex(key: string)
+        {
+            return this._pkToDrawIndex[key];
+        }
+
         applyUniformsToShaders()
         {
             glUtils.GlUniformClass.uniformSetCount = 0;
 
             //---- local variables, for easy access ----
             var view = this._view;
-            var usingPrimary = this._usingPrimaryBuffers;
+            var usingPrimary = this.isUsingPrimaryBuffers();
             //var drawPrim = this._drawPrimitive;
             //var changed = this._uniformsChanged;
 
-            if (this._usingPointCubes)
-            {
-                //---- for vertex shader ----
-                this._uniforms.szCanvas.setValue(this._canvasWidth, this._canvasHeight);
+            //if (this._usingPointCubes)
+            //{
+            //    //---- for vertex shader ----
+            //    this._uniforms.szCanvas.setValue(this._canvasWidth, this._canvasHeight);
 
-                //---- for fragment shader ----
-                this._uniforms.canvasSize.setValue(this._canvasWidth, this._canvasHeight);
+            //    //---- for fragment shader ----
+            //    this._uniforms.canvasSize.setValue(this._canvasWidth, this._canvasHeight);
 
-                this._uniforms.ndcZ.setValue(this._transformer.getNdcZ());
-                this._uniforms.cameraPos.setValue(this._transformer.getCameraPosAsArray());
-                this._uniforms.invMvpMatrix.setValue(this._transformer.getInvMvpMatrix());
-                this._uniforms.invWorldMatrix.setValue(this._transformer.getInvWorldpMatrix());
-            }
+            //    this._uniforms.ndcZ.setValue(this._transformer.getNdcZ());
+            //    this._uniforms.cameraPos.setValue(this._transformer.getCameraPosAsArray());
+            //    this._uniforms.invMvpMatrix.setValue(this._transformer.getInvMvpMatrix());
+            //    this._uniforms.invWorldMatrix.setValue(this._transformer.getInvWorldpMatrix());
+            //}
 
             if (true)       // changed.toPercent)
             {
@@ -1307,8 +1360,8 @@ module beachParty
             {
                 //---- toPercentTheta ----
                 var toPercentTheta = this._toPercent;
-                var isPrevLine = (this._prevChartClass === "linePlotClass");
-                var isCurrLine = (this._chartClass === "linePlotClass");
+                var isPrevLine = (this._prevChartClass == "linePlotClass");
+                var isCurrLine = (this._chartClass == "linePlotClass");
 
                 if (isPrevLine)
                 {
@@ -1348,9 +1401,10 @@ module beachParty
 
                 var tc1 = this._textureCount1;
                 var tc2 = this._textureCount2;
+                var textEnabled = this._view.isShapeImageEnabled();
 
-                var ut1 = (this._texture1 != null) ? 1 : 0;
-                var ut2 = (this._texture2 != null) ? 1 : 0;
+                var ut1 = (this._texture1 != null && textEnabled) ? 1 : 0;
+                var ut2 = (this._texture2 != null && textEnabled) ? 1 : 0;
 
                 //---- these do NOT need to be swapped ----
 
@@ -1385,18 +1439,29 @@ module beachParty
 
             if (true)       // changed.isDiscrete)
             {
+                var cm = this._view.colorMapping();
+
                 var isSmooth = view.colorMapping().isContinuous;
                 var isSmoothLast = this._isSmoothLast;
+                var isChannel = (cm.channelMapping != null);
+                var isChannelLast = this._isChannelLast;
 
                 if (usingPrimary)
                 {
                     var temp2 = isSmooth;
                     isSmooth = isSmoothLast;
                     isSmoothLast = temp2;
+
+                    var temp2 = isChannel;
+                    isChannel = isChannelLast;
+                    isChannelLast = temp2;
                 }
 
                 this._uniforms.isColorDiscrete.setValue(!isSmooth);
                 this._uniforms.isColorDiscrete2.setValue(!isSmoothLast);
+
+                this._uniforms.isColorDirect.setValue(isChannel);
+                this._uniforms.isColorDirect2.setValue(isChannelLast);
             }
 
             if (true)       // changed.sizeFactor)
@@ -1414,7 +1479,7 @@ module beachParty
                 var ptFactor = 1;
 
                 //---- for POINT drawing, we need to compute the size in PIXELS (vs. WORLD space) ----
-                if (this._drawPrimitive === bps.DrawPrimitive.point)
+                if (this._drawPrimitive == bps.DrawPrimitive.point)
                 {
                     ptFactor = this._transformer.worldSizeToScreen(ptFactor);
                 }
@@ -1428,7 +1493,7 @@ module beachParty
             //    vp.utils.debug("opacity=" + opacity + ", opacityLast=" + opacityLast + ", _toPercentUneased=" + this._toPercentUneased);
             //}
 
-            if (!this._usingPointCubes)       // changed.lighting)
+            //if (!this._usingPointCubes)       // changed.lighting)
             {
                 var lightParams = <bps.Lighting> view.lightingParams();
 
@@ -1464,7 +1529,7 @@ module beachParty
                     //---- LERP the world matrix ----
                     var truePercent = this._toPercent / this._maxPercent;
 
-                    if (this._usingPrimaryBuffers)
+                    if (this.isUsingPrimaryBuffers())
                     {
                         var lerpWorld = this.lerpMatrix(truePercent, lastWorld, currWorld);
                     }
@@ -1487,6 +1552,9 @@ module beachParty
                 var modelView = new Float32Array(16);
                 mat4.multiply(modelView, matView, lerpWorld);
                 this._uniforms.modelViewMatrix.setValue(modelView);
+
+                var dpv = (this._drawPrimitive == bps.DrawPrimitive.point || this._drawPrimitive == bps.DrawPrimitive.linePairs) ? 1.0 : 0.0;
+                this._uniforms.drawingPoints.setValue(dpv);
 
                 //---- normalMatrix ----
                 if (false)
@@ -1527,14 +1595,14 @@ module beachParty
                     //vp.utils.debug("canvasWidth=" + this._canvasWidth + ", beforeSize=" + sz + ", afterSize=" + (screenPos.x - zpos.x));
                 }
 
-                if (this._usingPointCubes)
-                {
-                    var mvp = mat4.create();
-                    mat4.multiply(mvp, matProjection, modelView);
+                //if (this._usingPointCubes)
+                //{
+                //    var mvp = mat4.create();
+                //    mat4.multiply(mvp, matProjection, modelView);
 
-                    this._uniforms.mvpMatrix.setValue(mvp);
-                    this._uniforms.worldMatrix.setValue(lerpWorld);
-                }
+                //    this._uniforms.mvpMatrix.setValue(mvp);
+                //    this._uniforms.worldMatrix.setValue(lerpWorld);
+                //}
             }
     
             //---- set this to -1 for the normal drawing ----
@@ -1562,221 +1630,6 @@ module beachParty
             return b;
         }
 
-        //dumpVertexBuffers(name: string, verticesPerRecord: number, buffers: NamedBuffers)
-        //{
-        //    vp.utils.debug("---> dump of: " + name);
-
-        //    for (var i = 0; i < 5; i++)
-        //    {
-        //        var inx = i * 3 * verticesPerRecord;
-        //        var x = buffers.xyzArray[inx + 0];
-        //        var y = buffers.xyzArray[inx + 1];
-        //        var z = buffers.xyzArray[inx + 2];
-
-        //        vp.utils.debug("  x=" + x + ", y=" + y + ", z=" + z);
-        //    }
-        //}
-
-        /** make a (single vertex per record) copy of the latest (from/to) vertex data.  */
-        copyVertexDataToTemp()
-        {
-            var fromVerticesPerRecord = this._lastVerticesPerRecord;
-            var tempBuffers = null;
-
-            if (fromVerticesPerRecord !== null)
-            {
-                var usePrimBuff = (!this._usingPrimaryBuffers);
-                vp.utils.debug("copyVertexDataToTemp: getting FROM data with usePrimBuff=" + usePrimBuff);
-
-                var attributes = this.getAttributesForCycle(usePrimBuff);
-                var fromBuffers = this.getNamedBuffers(attributes);
-                if (fromBuffers && fromBuffers.xyzArray)
-                {
-                    var drawIndexes = this.buildRecordToDrawIndexes();
-                    var recordCount = fromBuffers.xyzArray.length / (3 * fromVerticesPerRecord);
-                    var primaryKey = this._dataFrame.getNumericVector(primaryKeyName);
-                    var toVerticesPerRecord = 1;
-
-                    //---- create toBuffers ----
-                    tempBuffers = new NamedBuffers();
-                    this.createAttributeBuffersCore(attributes, 1 * recordCount, tempBuffers);
-
-                    this.copyVertexBuffers(fromBuffers, tempBuffers, primaryKey, recordCount, fromVerticesPerRecord, toVerticesPerRecord,
-                        drawIndexes);
-
-                    //this.dumpVertexBuffers("fromBuffers", fromVerticesPerRecord, fromBuffers);
-                    //this.dumpVertexBuffers("tempBuffers", 1, tempBuffers);
-                }
-            }
-
-            return tempBuffers;
-        }
-
-        /** copy from temp (single vertex per record) to from buffers.  */
-        copyTempToFromBuffers(tempBuffers: NamedBuffers)
-        {
-            var fromVerticesPerRecord = 1;
-            var toVerticesPerRecord = this.getVerticesPerRecord();
-
-            var usePrimBuff = (!this._usingPrimaryBuffers);
-            vp.utils.debug("copyTempToFromBuffers: getting FROM data with usePrimBuff=" + usePrimBuff);
-
-            var attributes = this.getAttributesForCycle(usePrimBuff);
-            var toBuffers = this.getNamedBuffers(attributes);
-
-            var drawIndexes = this.buildRecordToDrawIndexes();
-            var recordCount = toBuffers.xyzArray.length / (3 * toVerticesPerRecord);
-            var primaryKey = this._dataFrame.getNumericVector(primaryKeyName);
-
-            this.copyVertexBuffers(tempBuffers, toBuffers, primaryKey, recordCount, fromVerticesPerRecord, toVerticesPerRecord, drawIndexes);
-
-            this.setArraysFromNamedBuffers(attributes, toBuffers);
-
-            //this.dumpVertexBuffers("toBuffers", toVerticesPerRecord, toBuffers);
-
-        }
-
-        createAttributeBuffers()
-        {
-            var vertexCount = this._vertexCount;
-            var totalSpace = 0;
-
-            //---- save the FROM vertex data so we can do correct animation (even though the drawingPrimitive is changing) ----
-            var tempBuffers = this.copyVertexDataToTemp();
-
-            if (vertexCount > 0)
-            {
-                var attrs = this._glAttributes;
-
-                totalSpace = this.createAttributeBuffersCore(attrs, vertexCount);
-            }
-
-            this._arrayMemory = totalSpace;
-            this._fromBuffersHaveData = false;
-
-            if (tempBuffers)
-            {
-                //---- apply temp vertex data to FROM buffers ----
-                this.copyTempToFromBuffers(tempBuffers);
-
-                //---- don't reorder, since we built the fromBuffer with the correct order ----
-                this._fromBuffersHaveData = false;
-            }
-
-            this._lastVerticesPerRecord = this.getVerticesPerRecord();
-        }
-
-        createAttributeBuffersCore(attrs: IAttributes, vertexCount: number, arrayMap?: any)
-        {
-            var keys = vp.utils.keys(attrs);
-            var totalSpace = 0;
-
-            vp.utils.debug("--> createAttributeBuffers: recordCount=" + this._dataFrame.getRecordCount() + ", vertexCount=" + vertexCount);
-
-            for (var i = 0; i < keys.length; i++)
-            {
-                var name = keys[i];
-                var attr = <glUtils.GlAttributeClass>attrs[name];
-
-                if (attr._attrLoc !== -1)
-                {
-                    var numberCount = vertexCount * attr._sizeInFloats;
-
-                    var array = new Float32Array(numberCount);
-
-                    if (arrayMap)
-                    {
-                        var arrayName = name.substr(0, name.length-4) + "Array";        // remove last 4 chars
-                        arrayMap[arrayName] = array;
-                    }
-                    else
-                    {
-                        attr.setArray(array);
-                    }
-
-                    var space = 4 * numberCount;
-                    //vp.utils.debug("createAttributeBuffers: name=" + name + ", space=" + space);
-
-                    totalSpace += space;
-                }
-            }
-
-            return totalSpace;
-        }
-
-        //transformerTest()
-        //{
-        //    var scrWidth = this._canvasWidth;
-        //    var scrHeight = this._canvasHeight;
-
-        //    var xb = 4.3992;
-        //    var yb = 2.895;
-
-        //    xb = this._transformer._rcxWorld.right;
-        //    yb = this._transformer._rcxWorld.top;
-
-        //    this.testProjectToNDC(xb, yb);
-        //    this.testProjectToScreen(xb, yb);
-
-        //    this.testUnprojectFromNDC(scrWidth, scrHeight);
-        //}
-
-        //testProjectToNDC(xb, yb)
-        //{
-        //    var z = 0;
-        //    vp.utils.debug("");
-
-        //    var ptHC = this._transformer.projectToNDC(0, 0, z);
-        //    vp.utils.debug("transformTest: PROJECT-NDC to MIDDLE of screen: ptHC.x=" + ptHC.x + ", ptHC.y=" + ptHC.y + ", ptHC.z=" + ptHC.z);
-
-        //    var ptHC = this._transformer.projectToNDC(-xb, yb, z);
-        //    vp.utils.debug("transformTest: PROJECT-NDC to UPPER LEFT of screen: ptHC.x=" + ptHC.x + ", ptHC.y=" + ptHC.y + ", ptHC.z=" + ptHC.z);
-
-        //    var ptHC = this._transformer.projectToNDC(xb, -yb, z);
-        //    vp.utils.debug("transformTest: PROJECT-NDC to LOWER RIGHT of screen: ptHC.x=" + ptHC.x + ", ptHC.y=" + ptHC.y + ", ptHC.z=" + ptHC.z);
-        //}
-
-        //testProjectToScreen(xb, yb)
-        //{
-        //    var z = 0;
-        //    vp.utils.debug("");
-
-        //    var ptScr = this._transformer.projectToScreen(0, 0, z);
-        //    vp.utils.debug("transformTest: PROJECT to MIDDLE of screen: ptScr.x=" + ptScr.x + ", ptScr.y=" + ptScr.y + ", ptScr.z=" + ptScr.z);
-
-        //    var ptScr = this._transformer.projectToScreen(-xb, yb, z);
-        //    vp.utils.debug("transformTest: PROJECT to UPPER LEFT of screen: ptScr.x=" + ptScr.x + ", ptScr.y=" + ptScr.y + ", ptScr.z=" + ptScr.z);
-
-        //    var ptScr = this._transformer.projectToScreen(xb, -yb, z);
-        //    vp.utils.debug("transformTest: PROJECT to LOWER RIGHT of screen: ptScr.x=" + ptScr.x + ", ptScr.y=" + ptScr.y + ", ptScr.z=" + ptScr.z);
-        //}
-
-        //testUnprojectFromNDC(scrWidth, scrHeight)
-        //{
-        //    vp.utils.debug("");
-        //    var ptWorld = this._transformer.unprojectFromNDC(0, 0);
-        //    vp.utils.debug("transformTest: UNPROJECT-NDC from MIDDLE of screen: ptWorld.x=" + ptWorld.x + ", ptWorld.y=" + ptWorld.y + ", ptWorld.z=" + ptWorld.z);
-
-        //    var ptWorld = this._transformer.unprojectFromNDC(-1, 1);
-        //    vp.utils.debug("transformTest: UNPROJECT-NDC from UPPER LEFT of screen: ptWorld.x=" + ptWorld.x + ", ptWorld.y=" + ptWorld.y + ", ptWorld.z=" + ptWorld.z);
-
-        //    var ptWorld = this._transformer.unprojectFromNDC(1, -1);
-        //    vp.utils.debug("transformTest: UNPROJECT-NDC from LOWER RIGHT of screen: ptWorld.x=" + ptWorld.x + ", ptWorld.y=" + ptWorld.y + ", ptWorld.z=" + ptWorld.z);
-        //}
-
-        //testUnprojectFromScreen(scrWidth, scrHeight, z)
-        //{
-        //    vp.utils.debug("");
-        //    var ptWorld = this._transformer.unprojectFromScreen(scrWidth / 2, scrHeight / 2, z);
-        //    vp.utils.debug("transformTest: UNPROJECT from MIDDLE of screen: ptWorld.x=" + ptWorld.x + ", ptWorld.y=" + ptWorld.y + ", ptWorld.z=" + ptWorld.z);
-
-        //    var ptWorld = this._transformer.unprojectFromScreen(0, 0, z);
-        //    vp.utils.debug("transformTest: UNPROJECT from UPPER LEFT of screen: ptWorld.x=" + ptWorld.x + ", ptWorld.y=" + ptWorld.y + ", ptWorld.z=" + ptWorld.z);
-
-        //    var ptWorld = this._transformer.unprojectFromScreen(scrWidth - 1, scrHeight - 1, z);
-        //    vp.utils.debug("transformTest: UNPROJECT from LOWER RIGHT of screen: ptWorld.x=" + ptWorld.x + ", ptWorld.y=" + ptWorld.y + ", ptWorld.z=" + ptWorld.z);
-        //}
-
         public rotateMatrixX(value: number)
         {
             this._transformer.rotateMatrixY(value);
@@ -1792,7 +1645,8 @@ module beachParty
             this._transformer.rotateMatrixY(value);
         }
 
-        getVerticesPerRecord()
+        /** The true vertex count for the current drawing primitive. */
+        getNumVerticesPerShape()
         {
             //auto,         // not seen here, but take its value into account
             //point,
@@ -1800,34 +1654,38 @@ module beachParty
             //quad,
             //cube,
             //smartCube,
-            //line,
+            //lineStrip,
+            //linePairs,
             //thickLine,
 
-            var verticesByPrim = [1, 1, 3, 6, 36, 3, 1, 6];
+            var verticesByPrim = [1, 1, 3, 6, 36, 3, 1, 1, 6];
             var verticesPer = verticesByPrim[this._drawPrimitive];
 
             return verticesPer;
         }
 
-        //setData(dataFrame: dataFrameClass, maxRecords?: number, rebuildAttrBuffers?: boolean)
-        //{
-        //    if (!dataFrame)
-        //    {
-        //        dataFrame = new dataFrameClass();
-        //    }
+        /** vertex count for buffers. */
+        getNumVerticesInBuffer()
+        {
+            var vertexCount = 1;
 
-        //    this._dataFrame = dataFrame;
-        //    this._maxRecords = maxRecords;
-        //}
+            if (! this._glInst)
+            {
+                vertexCount = this.getNumVerticesPerShape();
+            }
+
+            return vertexCount;
+        }
 
         onDataOrPrimitiveChanged(needRebuild: boolean)
         {
             var recordCount = this.getDataLength();
-            var verticesPerRecord = this.getVerticesPerRecord();
+            var verticesPerRecord = this.getNumVerticesInBuffer();
             var vertexCount = recordCount * verticesPerRecord;
 
-            this._vertexCount = vertexCount;
+            //this._vertexCount = vertexCount;
             this._verticesPerRecord = verticesPerRecord;
+            var rebuiltProgram = false;
 
             if (false)      // this._drawPrimitive == bps.DrawPrimitive.point)
             {
@@ -1931,6 +1789,12 @@ module beachParty
         {
         }
 
+        clearMinMaxBreaks(md: bps.MappingData)
+        {
+            md.minBreakFacet = undefined;
+            md.maxBreakFacet = undefined;
+        }
+
         prepassAndFrameBuild(ctx: CanvasRenderingContext2D)
         {
             var userSizeFactor = this._view.userSizeFactor();
@@ -1950,6 +1814,16 @@ module beachParty
             var nvBuckets = <NamedVectors[]>null;
             var facetCount = 0;
             var facetBinResults = null;
+
+            //---- clear facet min/max breaks from last build ----
+            var xm = this._view.xMapping();
+            this.clearMinMaxBreaks(xm);
+
+            var ym = this._view.yMapping();
+            this.clearMinMaxBreaks(ym);
+
+            var zm = this._view.zMapping();
+            this.clearMinMaxBreaks(zm);
 
             if (this._facetHelper)
             {
@@ -1978,6 +1852,8 @@ module beachParty
             var dc = new DrawContext(rcxWorld, this._facetHelper, nv, scales, recordCount, filteredRecordCount, /*this._attrInfos,*/
                 userSizeFactor, this._prevChartClass, this._chartClass, userSizeFactor, this._view);
 
+            this._prepassDc = dc;
+
             //---- let chart do pre-pass over all facets ----
             var maxItems = this.computeFacetStats(dc, nvBuckets);
 
@@ -1988,11 +1864,7 @@ module beachParty
             this._view.getAppMgr().setMaxItemCount(maxItems);
 
             //---- build the chart frame & axes ----
-            var cfd = this._view.chartFrameData();
-
-            var hideAxes = (usingFacets || this._hideAxes);
-
-            var rcPlot = this._chartFrameHelper.build(this._canvasWidth, this._canvasHeight, hideAxes, usingFacets, scales, cfd, dc);
+            var rcPlot = this.buildChartFrame();
 
             //---- change bounds of gl canvas to "rcPlot" (these bounds used in calcRanges()) ----
             this.updateChartBounds(rcPlot.left, rcPlot.top, rcPlot.width, rcPlot.height, usingFacets);
@@ -2011,81 +1883,16 @@ module beachParty
             return { dc: dc, facetCount: facetCount, nvBuckets: nvBuckets, facetBinResults: facetBinResults };
         }
 
-        getAttributesForCycle(usingPrimaryBuffers: boolean)
+        buildChartFrame()
         {
-            var attr: any = {};
+            var cfd = this._view.chartFrameData();
+            var usingFacets = (this._facetHelper != null);
 
-            attr.vertexIdAttr = this._glAttributes.vertexId;
-            attr.staggerOffsetAttr = this._glAttributes.staggerOffset;
-            attr.vectorIndexAttr = this._glAttributes.vectorIndex;
+            var hideAxes = (usingFacets || this._hideAxes || !cfd.isVisible);
+            var dc = this._prepassDc;
 
-            if (usingPrimaryBuffers)
-            {
-                attr.xyzAttr = this._glAttributes.xyz;
-                attr.sizeAttr = this._glAttributes.size;
-                attr.colorAttr = this._glAttributes.colorIndex;
-                attr.imageIndexAttr = this._glAttributes.imageIndex;
-                attr.opacityAttr = this._glAttributes.opacity;
-                attr.thetaAttr = this._glAttributes.theta;
-
-                //vp.utils.debug("filling primary buffers");
-            }
-            else
-            {
-                attr.xyzAttr = this._glAttributes.xyz2;
-                attr.sizeAttr = this._glAttributes.size2;
-                attr.colorAttr = this._glAttributes.colorIndex2;
-                attr.imageIndexAttr = this._glAttributes.imageIndex2;
-                attr.opacityAttr = this._glAttributes.opacity2;
-                attr.thetaAttr = this._glAttributes.theta2;
-
-                //vp.utils.debug("filling secondary buffers");
-            }
-
-            return attr;
-        }
-
-        getNamedBuffers(attributes: any)
-        {
-            var buffers = new NamedBuffers();
-
-            buffers.xyzArray = attributes.xyzAttr._array;
-            buffers.sizeArray = attributes.sizeAttr._array;
-            buffers.colorArray = attributes.colorAttr._array;
-            buffers.imageIndexArray = attributes.imageIndexAttr._array;
-            buffers.opacityArray = attributes.opacityAttr._array;
-            buffers.thetaArray = attributes.thetaAttr._array;
-
-            buffers.staggerOffsetArray = attributes.staggerOffsetAttr._array;
-            buffers.vertexIdArray = attributes.vertexIdAttr._array;
-            buffers.vectorIndexArray = attributes.vectorIndexAttr._array;
-
-            return buffers;
-        }
-
-        setArraysFromNamedBuffers(attributes: any, buffers: NamedBuffers)
-        {
-            attributes.xyzAttr.setArray(buffers.xyzArray);
-            attributes.sizeAttr.setArray(buffers.sizeArray);
-            attributes.colorAttr.setArray(buffers.colorArray);
-            attributes.imageIndexAttr.setArray(buffers.imageIndexArray);
-            attributes.opacityAttr.setArray(buffers.opacityArray);
-            attributes.thetaAttr.setArray(buffers.thetaArray);
-
-            if (attributes.staggerOffsetAttr)
-            {
-                attributes.staggerOffsetAttr.setArray(buffers.staggerOffsetArray);
-            }
-
-            if (attributes.vertexIdAttr)
-            {
-                attributes.vertexIdAttr.setArray(buffers.vertexIdArray);
-            }
-
-            if (attributes.vectorIndexAttr)
-            {
-                attributes.vectorIndexAttr.setArray(buffers.vectorIndexArray);
-            }
+            var rcPlot = this._chartFrameHelper.build(this._canvasWidth, this._canvasHeight, hideAxes, usingFacets, dc.scales, cfd, dc);
+            return rcPlot;
         }
 
         getChartRepro(): bps.ChartRepro
@@ -2129,40 +1936,13 @@ module beachParty
             return isOnLabel;
         }
 
-        buildRecordToDrawIndexes()
-        {
-            var drawIndexes = null;
-
-            if (this._facetHelper)
-            {
-                var bins = this._facetHelper._binResult && this._facetHelper._binResult.bins
-                    ? this._facetHelper._binResult.bins
-                    : [];
-
-                var nextDrawIndex = 0;
-                drawIndexes = [];
-
-                for (var b = 0; b < bins.length; b++)
-                {
-                    var bin = bins[b];
-
-                    for (var i = 0; i < bin.rowIndexes.length; i++)
-                    {
-                        var recordIndex = bin.rowIndexes[i];
-                        drawIndexes[recordIndex] = nextDrawIndex++;
-                    }
-                }
-            }
-
-            return drawIndexes;
-        }
-
         /** fill buffers with attribute values for each object. */
         fillGlBuffers(buildStart: number)
         {
             this._textRects = [];
             //this._spheres = [];
             this._gridLinesBuffer = [];
+            this._drawInfos = [];
 
             //---- to minimize impact on memory, re-use this array (rather than reallocating it) ----
             //this._boundingBoxes = [];
@@ -2181,7 +1961,8 @@ module beachParty
             var dc = <DrawContext>result.dc;
             var nvBuckets = <any[]>result.nvBuckets;
             var facetHelper = this._facetHelper;
-            var facetCount = result.facetCount;
+            var facetCount = result.facetCount;     //   (facetHelper) ? facetHelper.facetCount() : 1;
+            var facetBinResults = result.facetBinResults;
 
             //---- clear 2D canvas and prepare Text and Line drawing context ----
             ctx.clearRect(0, 0, this._frameWidth, this._frameHeight);
@@ -2203,13 +1984,12 @@ module beachParty
 
             var layoutStart = vp.utils.now();
             this._facetLabelRects = [];
-
-            var attributes = this.getAttributesForCycle(this._usingPrimaryBuffers);
-            var buffers = this.getNamedBuffers(attributes);
+            var usingPrimary = this.isUsingPrimaryBuffers();
+            var attributes = this._bufferMgr.getAttributesForCycle(usingPrimary);
+            var buffers = this._bufferMgr.getNamedBuffers(attributes);
 
             //---- for now, always re-order the buffer ----
-            var fromAttributes = null;
-            var fromBuffers = null;
+            var reorderResult = null;
             var start = this.addToBuildPerf("reorderBuffer", buildStart);
 
             var drawOrderKey = this._dataFrame.getSortKey();
@@ -2218,19 +1998,10 @@ module beachParty
                 drawOrderKey = facetHelper._colName + "-" + facetHelper._facetCount + "-" + drawOrderKey;
             }
 
-            //---- experiment - remove these ASAP ----
-            //fromAttributes = this.getAttributesForCycle(!this._usingPrimaryBuffers);
-            //fromBuffers = this.getNamedBuffers(fromAttributes);
-            //this.dumpVertexBuffers("BEFORE FROM-Buffers", verticesPerRecord, fromBuffers);
-            //this.dumpVertexBuffers("BEFORE TO-Buffers", verticesPerRecord, buffers);
-
-            //---- if sort order has changed, REORDER record data in FROM buffer ----
-            if (this._fromBuffersHaveData && drawOrderKey !== this._drawOrderKey)
+            //---- if sort order has changed, REORDER record data in FROM buffer ---
+            if (drawOrderKey != this._drawOrderKey)
             {
-                fromAttributes = this.getAttributesForCycle(! this._usingPrimaryBuffers);
-                fromBuffers = this.getNamedBuffers(fromAttributes);
-
-                this.reorderFromBuffer(fromAttributes, fromBuffers, dc.nvData, dc.recordCount, verticesPerRecord);
+                reorderResult = this._bufferMgr.reorderFromBuffers(dc, verticesPerRecord);
             }
 
             //---- now its safe to clear this ----
@@ -2239,6 +2010,9 @@ module beachParty
 
             start = this.addToBuildPerf("layoutPrep", start);
             var drawBufferIndex = 0;            // where to put next record layout data
+
+            var verticesPerShape = this.getNumVerticesPerShape();
+            var verticesInBuffer = this.getNumVerticesInBuffer();
 
             if (this._facetHelper)
             {
@@ -2278,6 +2052,9 @@ module beachParty
 
                     this.layoutChartOrFacet(dc, verticesPerRecord, buffers, counters, facetOffset, drawBufferIndex);
 
+                    var drawInfo = new DrawInfo(drawBufferIndex, facetRecordCount);
+                    this._drawInfos.push(drawInfo);
+
                     drawBufferIndex += facetRecordCount;
                 }
             }
@@ -2285,24 +2062,41 @@ module beachParty
             {
                 //---- REGULAR PASS (no facets) ----
                 this.layoutChartOrFacet(dc, verticesPerRecord, buffers, counters, { x: 0, y: 0 }, drawBufferIndex);
+                var recordCount = this._dataFrame.getRecordCount();
+
+                var drawInfo = new DrawInfo(drawBufferIndex, recordCount);
+                this._drawInfos.push(drawInfo);
             }
+
+            //vp.utils.debug("after layout of all records, keyCount(this._pkToDrawIndex): " + vp.utils.keys(this._pkToDrawIndex).length);
+
+            if (true)       // always add this to keep buffer use stablized   // hvi > -1)
+            {
+                //---- add DrawInfo for HOVER SHAPE (will dynamically set the hoverVectorIndex) ----
+                var drawInfo = new DrawInfo(-1, 1);
+                this._drawInfos.push(drawInfo);
+            }
+
+            this._bufferMgr.allocateBuffers(this._drawInfos);
+            var drawIndexes = vp.data.range(0, this._drawInfos.length - 1);
+
+            this._bufferMgr.bindBuffersToArrayData(drawIndexes);
 
             var elapsed = vp.utils.now() - layoutStart;
             //vp.utils.debug("layoutChartOrFacet took: " + elapsed + " ms");
 
             var start = vp.utils.now();
 
-            this.setArraysFromNamedBuffers(attributes, buffers);
+            this._bufferMgr.setArraysFromNamedBuffers(attributes, buffers);
 
             //this.dumpVertexBuffers("FILL toBuffers", verticesPerRecord, buffers);
 
-            if (fromAttributes)
+            if (reorderResult)
             {
-                this.setArraysFromNamedBuffers(fromAttributes, fromBuffers);
-                //this.dumpVertexBuffers("FILL fromBuffers", verticesPerRecord, buffers);
+                this._bufferMgr.setArraysFromNamedBuffers(reorderResult.attributes, reorderResult.buffers);
             }
 
-            this._fromBuffersHaveData = true;
+            this._bufferMgr.setFromBufferHasData(true);
 
             this.bindGridLinesBuffer();
 
@@ -2450,6 +2244,24 @@ module beachParty
             return rect;
         }
 
+        addDefaultLayoutResults(dr: bps.LayoutResult, fri: number, dc: DrawContext, nv: NamedVectors, drawBufferIndex: number)
+        {
+            dr.opacity = 1;
+            dr.theta = 0;
+            dr.staggerOffset = 0;
+
+            this.setStaggerOffset(dr, fri, dc);
+
+            if (this._view.colorMapping().channelMapping != null)
+            {
+                var scales = dc.scales;
+
+                dr.redChannel = this.scaleColData(nv.red, drawBufferIndex, scales.red);
+                dr.greenChannel = this.scaleColData(nv.green, drawBufferIndex, scales.green);
+                dr.blueChannel = this.scaleColData(nv.blue, drawBufferIndex, scales.blue);
+            }
+        }
+
         layoutChartOrFacet(dc: DrawContext, verticesPerRecord: number, buffers: NamedBuffers, counters: any,
             facetOffset: any, drawBufferIndex: number)
         {
@@ -2464,6 +2276,7 @@ module beachParty
             this.preLayoutLoop(dc);
 
             var nv = dc.nvData;
+            var ad = this._animationData;
 
             start = this.addToBuildPerf("preLayout", start);
 
@@ -2472,9 +2285,13 @@ module beachParty
             for (var fri = 0; fri < dc.recordCount; fri++)
             {
                 var primaryKey = nv.primaryKey.getRawData(fri) + "";
+                var dr = new bps.LayoutResult();
+
+                //---- add default values for this record's layout result ----
+                this.addDefaultLayoutResults(dr, fri, dc, nv, drawBufferIndex);
 
                 //---- call chart class to layout the shape for this record ----
-                var dr = this.layoutDataForRecord(fri, dc);
+                this.layoutDataForRecord(fri, dc, dr);
 
                 if (this._buildLayoutResults)
                 {
@@ -2488,13 +2305,22 @@ module beachParty
                 //start = this.addToBuildPerf("process", start);
 
                 //---- for IE code JIT-ing purposes, the fill buffers loop must be in its own function ----
-                this.fillBuffersForRecord(buffers, dr, facetOffset, nv, dc, verticesPerRecord, primaryKey, drawBufferIndex, fri,
-                    rect);
+                this._bufferMgr.fillBuffersForRecord(buffers, dr, facetOffset, nv, dc, verticesPerRecord,
+                    primaryKey, drawBufferIndex, fri, rect);
+
+                if (this._tm.colName != null)
+                {
+                    this.drawTextForItem(this._ctx, drawBufferIndex, rect, nv, dr, primaryKey);
+                }
 
                 this._pkToDrawIndex[primaryKey] = drawBufferIndex;
                 //start = this.addToBuildPerf("fill", start);
+
                 drawBufferIndex++;
             }
+
+            //var debugMsg = "record drawn: " + i;
+            //vp.select("#consoleDiv").text(debugMsg);
 
             if (this._lm.colName)
             {
@@ -2503,9 +2329,48 @@ module beachParty
 
             start = this.addToBuildPerf("layoutEx", start);
 
+            //vp.utils.debug("finished layout of " + dc.recordCount + " shapes");
+
             this.fillGridLinesBuffer(dc, facetOffset);
 
             this.addToBuildPerf("layoutPost", start);
+        }
+
+        setStaggerOffset(dr: bps.LayoutResult, facetRelativeIndex: number, dc: DrawContext)
+        {
+            var ad = this._animationData;
+            if (ad.isStaggeringEnabled && !this._isSelectionChangeOnly && !this._isFirstFilteredStage)
+            {
+                //---- stagger each shape a bit ----
+                //---- to stagger shapes in the sorted order, we use "facetRelativeIndex" ----
+                var staggerPercent = facetRelativeIndex / dc.recordCount;
+
+                //---- if we are moving from a COLUMN to a SCATTER, we want to process the HIGH Y values first (values are sorted by Y), so we flip the order ----
+                //---- likewise, if we moving from a BAR to a SCATTER, we want to process the HIGH X values first (values are sorted by X) ----
+                var fromCol = (dc.fromChartType == "columnCountClass" || dc.fromChartType == "columnSumClass");
+                var fromBar = (dc.fromChartType == "barCountClass" || dc.fromChartType == "barSumClass");
+                var flipOrder = (fromCol && dc.toChartType == "scatterPlotClass") || (fromBar && dc.toChartType == "scatterPlotClass");
+
+                //---- we also change flipOrder when usingPrimaryBuffers=true, since the value of "toPercent" will be flipped in the shader ----
+                if (this.isUsingPrimaryBuffers())          //   flipOrder == this._usingPrimaryBuffers)
+                {
+                    flipOrder = !flipOrder;
+                }
+
+                if (flipOrder)
+                {
+                    staggerPercent = 1 - staggerPercent;
+                }
+
+                //---- map all staggerOffset values to between 0 and stagger time as percent of animation time) ----
+                dr.staggerOffset = -(staggerPercent * (ad.maxStaggerTime / ad.animationDuration));        // -(maxStaggerTime * staggerPercent);
+            }
+
+        }
+
+        getBufferMgr()
+        {
+            return this._bufferMgr;
         }
 
         drawLinesBetweenShapes(dc: DrawContext, buffers: NamedBuffers, facetOffset: any)
@@ -2527,7 +2392,9 @@ module beachParty
                 ctx.beginPath();
                 
                 //---- build a JSON array of: primaryKey, lineCol, and xCol ---- 
-                var data = dc.nvData.x.values.map((x: number, index: number) =>
+                var xValues = dc.nvData.x.values.toArray();
+
+                var data = xValues.map((x: number, index: number) =>
                 {
                     return { xValue: x, lineKey: lineVector[index], primaryKey: pkVector.getRawData(index) };
                 });
@@ -2549,7 +2416,7 @@ module beachParty
                 {
                     var values = g.values;
 
-                    if (values.length > 1 && values[0].lineKey !== "")
+                    if (values.length > 1 && values[0].lineKey != "")
                     {
                         var last = values[0];
                         var ptLast = this.getCenterOfShapeInScreenCoords(last.primaryKey + "");
@@ -2587,236 +2454,15 @@ module beachParty
             return { x: x, y: y };
         }
 
-        fillBuffersForRecord(buffers: NamedBuffers, dr: LayoutResult, facetOffset, nv: NamedVectors, dc: DrawContext,
-            verticesPerRecord: number, primaryKey: string, vectorIndex: number, facetRelativeIndex: number, rect: ClientRect)
+        isUsingPrimaryBuffers()
         {
-            var innerLoopCount = 0;
-            var staggerOffset = 0;
-
-            //---- find next spot for vertices, based on vectorIndex (keep primary/secondary buffers in sync, in spite of sorting ----
-            //---- that is, the GL buffers are always in natural (vectorIndex) order. ----
-            var next1 = verticesPerRecord * vectorIndex;
-
-            //if (vectorIndex < 4)
-            //{
-            //    var isFillingPrimary = (buffers.xyzArray == this._glAttributes.xyz._array);
-
-            //    vp.utils.debug("fillBuffersForRecord: fillingPrimary=" + isFillingPrimary +
-            //        ", vectorIndex=" + vectorIndex + ", primaryKey=" + primaryKey + ", next1=" + next1);
-            //}
-
-            var next3 = 3 * next1;
-            var ad = this._animationData;
-
-            if (vectorIndex === 0)
-            {
-                //---- this code is NECESSARY to enable JIT-ing (make a DOM API call) ----
-                var ctxJit = this._view.getContext2d();
-                ctxJit.globalAlpha = this._view.textOpacity();
-                ctxJit.font = "16px Tahoma";
-            }
-
-            if (this._tm.colName != null)
-            {
-                this.drawTextForItem(this._ctx, vectorIndex, rect, nv, dr, primaryKey);
-            }
-
-            if (ad.isStaggeringEnabled && !this._isSelectionChangeOnly && !this._isFirstFilteredStage)
-            {
-                //---- stagger each shape a bit ----
-                //---- to stagger shapes in the sorted order, we use "facetRelativeIndex" ----
-                var staggerPercent = facetRelativeIndex / dc.recordCount;
-
-                //---- if we are moving from a COLUMN to a SCATTER, we want to process the HIGH Y values first (values are sorted by Y), so we flip the order ----
-                //---- likewise, if we moving from a BAR to a SCATTER, we want to process the HIGH X values first (values are sorted by X) ----
-                var fromCol = (dc.fromChartType === "columnCountClass" || dc.fromChartType === "columnSumClass");
-                var fromBar = (dc.fromChartType === "barCountClass" || dc.fromChartType === "barSumClass");
-                var flipOrder = (fromCol && dc.toChartType === "scatterPlotClass") || (fromBar && dc.toChartType === "scatterPlotClass");
-
-                //---- we also change flipOrder when usingPrimaryBuffers=true, since the value of "toPercent" will be flipped in the shader ----
-                if (this._usingPrimaryBuffers)          //   flipOrder == this._usingPrimaryBuffers)
-                {
-                    flipOrder = !flipOrder;
-                }
-
-                if (flipOrder)
-                {
-                    staggerPercent = 1 - staggerPercent;
-                }
-
-                //---- map all staggerOffset values to between 0 and stagger time as percent of animation time) ----
-                staggerOffset = -(staggerPercent * (ad.maxStaggerTime / ad.animationDuration));        // -(maxStaggerTime * staggerPercent);
-            }
-
-            for (var j = 0; j < verticesPerRecord; j++)
-            {
-                buffers.xyzArray[next3] = dr.x;
-                buffers.sizeArray[next3] = dr.width;
-                next3++;
-
-                buffers.xyzArray[next3] = dr.y;
-                buffers.sizeArray[next3] = dr.height;
-                next3++;
-
-                buffers.xyzArray[next3] = dr.z;
-                buffers.sizeArray[next3] = dr.depth;
-                next3++;
-
-                buffers.colorArray[next1] = dr.colorIndex;
-                buffers.opacityArray[next1] = dr.opacity;
-
-                if (buffers.imageIndexArray)
-                {
-                    buffers.imageIndexArray[next1] = dr.imageIndex;
-                }
-
-                if (buffers.staggerOffsetArray)
-                {
-                    buffers.staggerOffsetArray[next1] = staggerOffset;
-                }
-
-                if (buffers.thetaArray)
-                {
-                    buffers.thetaArray[next1] = dr.theta;
-                }
-
-                if (buffers.vertexIdArray)
-                {
-                    buffers.vertexIdArray[next1] = j;
-                }
-
-                if (buffers.vectorIndexArray)
-                {
-                    buffers.vectorIndexArray[next1] = vectorIndex;
-                }
-
-                next1++;
-                innerLoopCount++;
-            }
+            return this._bufferMgr.getUsingPrimaryBuffers();
         }
 
-        /** uses */
-        getToBufferIndex(recordIndex: number)
-        {
-        }
-
-        /** This rearranges the record values in the "from" buffer to match the current sort order. */
-        reorderFromBuffer(fromAttrs, fb: NamedBuffers, nv: NamedVectors, recordCount: number, verticesPerRecord: number)
-        {
-            //---- the idea is to reorder the entries in fromBuff - to do this, we move entries from fromBuff ----
-            //---- to toBuff, and then copy it back to fromBuff when completed.  ----
-
-            var toAttrs = this.getAttributesForCycle(this._usingPrimaryBuffers);
-            var tb = this.getNamedBuffers(toAttrs);
-
-            //var isFromPrimary = (fromAttrs.xyzAttr == this._glAttributes.xyz);
-            //if (isFromPrimary)
-            //{
-            //    vp.utils.debug("reorderFromBuffer: moving " + recordCount + " items from PRIMARY to SECONDARY");
-            //}
-            //else
-            //{
-            //    vp.utils.debug("reorderFromBuffer: moving " + recordCount + " items from SECONDARY to PRIMARY");
-            //}
-
-            var drawIndexes = this.buildRecordToDrawIndexes();
-
-            this.copyVertexBuffers(fb, tb, nv.primaryKey, recordCount, verticesPerRecord, verticesPerRecord, drawIndexes);
-
-            //---- now copy data back, in correct order, from TB to FB ----
-            this.arrayCopy(tb.xyzArray, fb.xyzArray);
-            this.arrayCopy(tb.sizeArray, fb.sizeArray);
-            this.arrayCopy(tb.colorArray, fb.colorArray);
-            this.arrayCopy(tb.opacityArray, fb.opacityArray);
-            this.arrayCopy(tb.imageIndexArray, fb.imageIndexArray);
-            this.arrayCopy(tb.staggerOffsetArray, fb.staggerOffsetArray);
-
-            if (fb.thetaArray)
-            {
-                this.arrayCopy(tb.thetaArray, fb.thetaArray);
-            }
-
-            if (fb.vertexIdArray)
-            {
-                this.arrayCopy(tb.vertexIdArray, fb.vertexIdArray);
-            }
-
-            if (fb.vectorIndexArray)
-            {
-                this.arrayCopy(tb.vectorIndexArray, fb.vectorIndexArray);
-            }
-        }
-
-        /** copies 1 multiple of vertex data from "fb" to verticesPerRecord multiples at "tb" */
-        copyVertexBuffers(fb: NamedBuffers, tb: NamedBuffers, primaryKey: NumericVector, recordCount: number,
-            fromVerticesPerRecord: number, toVerticesPerRecord: number, drawIndexes)
-        {
-            for (var ri = 0; ri < recordCount; ri++)
-            {
-                var vi = (drawIndexes) ? drawIndexes[ri] : ri;
-
-                var ti = toVerticesPerRecord * vi;        // to index
-                var ti3 = 3 * ti;                       // to index for xyz and size
-
-                var key = primaryKey.getRawData(ri) + "";
-                var fromVi = this._pkToDrawIndex[key];
-                var fi = fromVerticesPerRecord * fromVi;    // from index
-                var fi3 = 3 * fi;                       // from index for xyz and size
-
-                //if (vi < 4)
-                //{
-                //    vp.utils.debug("reorderFromBuffer: vi=" + vi + ", key=" + key + ", fromVi=" + fromVi);
-                //}
-
-                for (var j = 0; j < toVerticesPerRecord; j++)
-                {
-                    tb.xyzArray[ti3] = fb.xyzArray[fi3];
-                    tb.xyzArray[ti3 + 1] = fb.xyzArray[fi3 + 1];
-                    tb.xyzArray[ti3 + 2] = fb.xyzArray[fi3 + 2];
-
-                    tb.sizeArray[ti3] = fb.sizeArray[fi3];
-                    tb.sizeArray[ti3 + 1] = fb.sizeArray[fi3 + 1];
-                    tb.sizeArray[ti3 + 2] = fb.sizeArray[fi3 + 2];
-
-                    tb.colorArray[ti] = fb.colorArray[fi];
-                    tb.opacityArray[ti] = fb.opacityArray[fi];
-
-                    tb.imageIndexArray[ti] = fb.imageIndexArray[fi];
-                    tb.staggerOffsetArray[ti] = fb.staggerOffsetArray[fi];
-
-                    if (fb.thetaArray)
-                    {
-                        tb.thetaArray[ti] = fb.thetaArray[fi];
-                    }
-
-                    if (fb.vertexIdArray)
-                    {
-                        tb.vertexIdArray[ti] = fb.vertexIdArray[fi];
-                    }
-
-                    if (fb.vectorIndexArray)
-                    {
-                        tb.vectorIndexArray[ti] = fb.vectorIndexArray[fi];
-                    }
-
-                    ti3 += 3;
-                    ti++;
-
-                    //---- to allow code to copy between different verticesPerRecord, we just recopy first vertex of from ----
-                    //fi3 += 3;
-                    //fi++;
-                }
-            }
-
-        }
-
-        arrayCopy(fb: Float32Array, tb: Float32Array)
-        {
-            for (var i = 0; i < fb.length; i++)
-            {
-                tb[i] = fb[i];
-            }
-        }
+        ///** uses */
+        //getToBufferIndex(recordIndex: number)
+        //{
+        //}
 
         drawTextForItem(ctx: CanvasRenderingContext2D, vectorIndex: number, rect, nv, dr, primaryKey: string)
         {
@@ -3000,21 +2646,34 @@ module beachParty
             var crMap = this._view.colorMapping();
             var szMap = this._view.sizeMapping();
             var txMap = this._view.textMapping();
-            var imMap = this._view.imageMapping();
+            var imMap = this._view.shapeMapping();
             var faMap = this._view.facetMapping();
             var xMap = this._view.xMapping();
             var yMap = this._view.yMapping();
             var zMap = this._view.zMapping();
+            var auxMap = this._view.auxMapping();
 
             var xData = this.getCol(dataFrame, xMap.colName);
             var yData = this.getCol(dataFrame, yMap.colName);
             var zData = this.getCol(dataFrame, zMap.colName);
+            var auxData = this.getCol(dataFrame, auxMap.colName);
+
+            var ch = crMap.channelMapping;
+            if (ch)
+            {
+                var redData = this.getCol(dataFrame, ch.redColumn);
+                var greenData = this.getCol(dataFrame, ch.greenColumn);
+                var blueData = this.getCol(dataFrame, ch.blueColumn);
+            }
+
             var sizeData = this.getCol(dataFrame, szMap.colName);
             var colorData = this.getCol(dataFrame, crMap.colName);
             var imageIndexData = this.getCol(dataFrame, imMap.colName);
             var textData = this.getCol(dataFrame, txMap.colName, true);
             var facetData = this.getCol(dataFrame, faMap.colName);
-            var staggerOffsetData = this.getCol(dataFrame, "staggerOffset");
+
+            //---- todo: remove this ----
+            var staggerOffsetData = null;       // this.getCol(dataFrame, "staggerOffset");
 
             var selectData = this.getCol(dataFrame, selectedName);
             var filterData = this.getCol(dataFrame, filteredName);
@@ -3030,7 +2689,8 @@ module beachParty
             ///     enterExitFilter - when entry is true, the record WILL be included in the ENTER/EXIT effect
 
             var nv = new NamedVectors(length, xData, yData, zData, colorData, imageIndexData, staggerOffsetData, sizeData, textData,
-                facetData, selectData, filterData, filterData, primaryKeyData, randomXData, randomYData);
+                facetData, selectData, filterData, filterData, primaryKeyData, randomXData, randomYData, 
+                redData, greenData, blueData, auxData);
 
             if (this._isFirstFilteredStage && this._isForwardFilter)
             {
@@ -3071,7 +2731,7 @@ module beachParty
 
         getColorCount()
         {
-            var floats = (this._usingPrimaryBuffers) ? this._colorFloats : this._colorFloats2;
+            var floats = (this.isUsingPrimaryBuffers()) ? this._colorFloats : this._colorFloats2;
             var count = (floats.length / 3);
 
             var selectionExists = (this._dataMgr.getSelectedCount() > 0);
@@ -3105,24 +2765,32 @@ module beachParty
             var sizeScale = utils.makePaletteScale(nv.size, nv.layoutFilter, szPalette, null, breaks, view.sizeMapping());
 
             //---- build IMAGE INDEX scale ----
-            var im = this._view.imageMapping();
+            var im = this._view.shapeMapping();
             var imagePalette = im.imagePalette;
             var breaks = im.breaks;
             var imgIindexPalette = (imagePalette) ? vp.data.range(0, imagePalette.length - 1) : null;
 
-            var imageScale = utils.makePaletteScale(nv.imageIndex, nv.layoutFilter, imgIindexPalette, null, breaks, view.imageMapping());
+            var imageScale = utils.makePaletteScale(nv.imageIndex, nv.layoutFilter, imgIindexPalette, null, breaks, view.shapeMapping());
             imageScale.isPaletteDiscrete(true);
 
             //---- build COLOR scale ----
-            var colorIndexScale = this.buildColorScale(nv, view.colorMapping());
+            var cm = this._view.colorMapping();
+            var colorIndexScale = this.buildColorScale(nv, cm);
+
+            if (cm.channelMapping)
+            {
+                var redScale = utils.makeRangeScale(nv.red, nv.layoutFilter, 0, 255, 0, cm);
+                var greenScale = utils.makeRangeScale(nv.green, nv.layoutFilter, 0, 255, 0, cm);
+                var blueScale = utils.makeRangeScale(nv.blue, nv.layoutFilter, 0, 255, 0, cm);
+            }
 
             return {
                 x: xScale, y: yScale, z: zScale, size: sizeScale, colorIndex: colorIndexScale,
-                imageIndex: imageScale
+                imageIndex: imageScale, red: redScale, green: greenScale, blue: blueScale,
             };
         }
 
-        buildColorScale(nv: NamedVectors, md: bps.MappingData)
+         buildColorScale(nv: NamedVectors, md: bps.MappingData)
         {
             var scale = null;
             if (nv && nv.colorIndex)
@@ -3136,7 +2804,7 @@ module beachParty
                 var maxIndex = colorCount - 1;
                 var catKeys = null;
 
-                if (colType === "string" || cm.forceCategory)
+                if (colType == "string" || cm.forceCategory)
                 {
                     //---- create CATEGORY scale ----
 
@@ -3174,7 +2842,7 @@ module beachParty
                     maxIndex += .999999;         // adding another "9" here breaks scaling on WebGL (gets interpreted as a "1")
                 }
 
-                if (this._usingPrimaryBuffers)
+                if (this.isUsingPrimaryBuffers())
                 {
                     this._maxColors = colorCount;
                 }
@@ -3183,26 +2851,25 @@ module beachParty
                     this._maxColors2 = colorCount;
                 }
 
-                if (cm.customScalingCallback)
-                {
-                    //---- CUSTOM CALLBACK ----
-                    if (vp.utils.isString(cm.customScalingCallback))
-                    {
-                        //----  convert from string to func ----
-                        var foo = null;
-                        /* tslint:disable */
-                        eval("foo = " + cm.customScalingCallback);
-                        /* tslint:enable */
+                //if (cm.customScalingCallback)
+                //{
+                //    //---- CUSTOM CALLBACK ----
+                //    if (vp.utils.isString(cm.customScalingCallback))
+                //    {
+                //        //----  convert from string to func ----
+                //        var foo = null;
+                //        eval("foo = " + cm.customScalingCallback);
 
-                        var customScale: any = {};
-                        customScale.scale = foo;
+                //        var customScale: any = {};
+                //        customScale.scale = foo;
 
-                        cm.customScalingCallback = customScale;
-                    }
+                //        cm.customScalingCallback = customScale;
+                //    }
 
-                    scale = cm.customScalingCallback;
-                }
-                else if (catKeys)
+                //    scale = cm.customScalingCallback;
+                //}
+                //else
+                if (catKeys)
                 {
                     var palette = (cm.isContinuous) ? [0, colorCount - 1] : vp.data.range(0, colorCount - 1);
                     var palette = (false) ? [0, colorCount - 1] : vp.data.range(0, colorCount - 1);
@@ -3218,7 +2885,7 @@ module beachParty
                     var minVal = 0;
                     var maxVal = 0;
 
-                    if (cm.breaks && cm.breaks.length && nv.colorIndex.colType !== "string")
+                    if (cm.breaks && cm.breaks.length && nv.colorIndex.colType != "string")
                     {
                         //---- get min/max from breaks ----
                         var len = cm.breaks.length;
@@ -3228,26 +2895,26 @@ module beachParty
                     else
                     {
                         //---- get min/max from data ----
-                        var result = utils.getMinMax(nv.colorIndex, nv.layoutFilter);
+                        var result = utils.getMinMax(nv.colorIndex, nv.layoutFilter, md);
                         minVal = result.min;
                         maxVal = result.max;
                     }
 
-                    if (cm.spread === bps.MappingSpread.low)
+                    if (cm.spread == bps.MappingSpread.low)
                     {
                         //---- SPREAD LOW scale  ----
                         scale = vp.scales.createLowBias()
                             .domainMin(minVal)
                             .domainMax(maxVal)
-                            .range(0, maxIndex);
+                            .range(0, maxIndex)
                     }
-                    else if (cm.spread === bps.MappingSpread.high)
+                    else if (cm.spread == bps.MappingSpread.high)
                     {
                         //---- SPREAD HIGH scale ----
                         scale = vp.scales.createHighBias()
                             .domainMin(minVal)
                             .domainMax(maxVal)
-                            .range(0, maxIndex);
+                            .range(0, maxIndex)
 
                     }
                     else
@@ -3256,12 +2923,15 @@ module beachParty
                         scale = vp.scales.createLinear()
                             .domainMin(minVal)
                             .domainMax(maxVal)
-                            .range(0, maxIndex);
+                            .range(0, maxIndex)
                     }
                 }
             }
 
-            utils.buildFormatter(md, scale, colType);
+            if (scale && colType)
+            {
+                utils.buildFormatter(md, scale, colType);
+            }
 
             return scale;
         }
@@ -3286,29 +2956,23 @@ module beachParty
             return result;
         }
 
-        layoutDataForRecord(i: number, dc): LayoutResult
+        layoutDataForRecord(i: number, dc: DrawContext, dr: bps.LayoutResult)
         {
             var nv = dc.nvData;
             var scales = dc.scales;
 
-            var x = this.scaleColData(nv.x, i, scales.x);
-            var y = this.scaleColData(nv.y, i, scales.y);
-            var z = this.scaleColData(nv.z, i, scales.z);
+            dr.x = this.scaleColData(nv.x, i, scales.x);
+            dr.y = this.scaleColData(nv.y, i, scales.y);
+            dr.z = this.scaleColData(nv.z, i, scales.z);
 
-            var width = this.scaleColData(nv.size, i, scales.size, 1);
-            var height = width;
-            var depth = width;
+            dr.width = this.scaleColData(nv.size, i, scales.size, 1);
+            dr.height = dr.width;
+            dr.depth = dr.width;
 
-            var colorIndex = this.scaleColData(nv.colorIndex, i, scales.colorIndex);
+            dr.colorIndex = this.scaleColData(nv.colorIndex, i, scales.colorIndex);
             //colorIndex = Math.floor(colorIndex);
 
-            var imageIndex = this.scaleColData(nv.imageIndex, i, scales.imageIndex);
-            var opacity = 1;
-
-            return {
-                x: x, y: y, z: z, width: width, height: height, depth: depth, colorIndex: colorIndex, opacity: opacity,
-                imageIndex: imageIndex, theta: 0
-            };
+            dr.imageIndex = this.scaleColData(nv.imageIndex, i, scales.imageIndex);
         }
 
         resetDrawPerf()
@@ -3343,9 +3007,130 @@ module beachParty
             return this._buildPerf[name];
         }
 
-        drawBuffers()
+        getHoverIndex()
+        {
+            var hvi = -1;
+
+            //---- draw hover shape on top ----
+            var hp = this._view.hoverParams();
+            if (hp.hoverEffect != bps.HoverEffect.none)
+            {
+                var drawOnTop = false;
+                var hpk = this._view.hoverPrimaryKey();
+                if (hpk !== null)
+                {
+                    hvi = this._dataFrame.getVectorIndexByKey(hpk);
+                }
+            }
+
+            return hvi;
+        }
+
+        doHoverDrawPrep()
+        {
+            //---- update hoverIndex in drawInfos[] ----
+            var hvi = this.getHoverIndex();
+
+            if (hvi > -1)
+            {
+                //---- hover stuff ----
+                var hp = this._view.hoverParams();
+                var hoverColor = hp.hoverColor;
+                //var drawHover = false;
+
+                if (!hoverColor || hoverColor == "none" || hp.hoverEffect == bps.HoverEffect.sameColor)
+                {
+                    hvi = -1;
+                    //drawHover = true;
+                }
+                else
+                {
+                    var cr3 = vp.color.getColorFromName(hoverColor);
+                    var hRed = cr3[0] / 255;
+                    var hGreen = cr3[1] / 255;
+                    var hBlue = cr3[2] / 255;
+
+                    this._uniforms.hoverColor.setValue(hRed, hGreen, hBlue);
+                    //drawHover = true;
+                }
+            }
+
+            this._uniforms.hoverVectorIndex.setValue(hvi);
+
+            //---- apply "hvi" to last drawInfos[] ----
+            var diCount = this._drawInfos.length;
+            var diLast = this._drawInfos[diCount - 1];
+            diLast.instOffset = hvi;
+            this._bufferMgr.bindBuffersToArrayData([diCount-1]);
+        }
+
+        drawShapes()
         {
             var gl = this._gl;
+            var diCount = this._drawInfos.length;
+
+            //---- draw shapes ----
+            gl.useProgram(this._shapesProgram);
+
+            var isWireframe = this._view.isWireframe();
+            var glInst = this._glInst;
+
+            var geomType = null;
+            if (this._drawPrimitive == bps.DrawPrimitive.point)
+            {
+                geomType = gl.POINTS;
+            }
+            else if (isWireframe || this._drawPrimitive == bps.DrawPrimitive.lineStrip)
+            {
+                geomType = gl.LINE_STRIP;
+            }
+            else if (this._drawPrimitive == bps.DrawPrimitive.linePairs)
+            {
+                geomType = gl.LINES;
+            }
+            else
+            {
+                geomType = gl.TRIANGLES;
+            }
+
+            var verticesPerShape = this.getNumVerticesPerShape();
+
+            for (var i = 0; i < diCount; i++)
+            {
+                var di = this._drawInfos[i];
+
+                if (i == diCount - 1)
+                {
+                    this.doHoverDrawPrep();
+                }
+
+                if (di.instOffset >= 0)
+                {
+                    this._bufferMgr.bindBufferForDrawing(i);
+
+                    if (glInst)
+                    {
+                        glInst.drawArraysInstancedANGLE(geomType, 0, verticesPerShape, di.instCount);
+                    }
+                    else
+                    {
+                        gl.drawArrays(geomType, 0, di.instCount * verticesPerShape);
+                    }
+
+                    var error = gl.getError();
+                    if (error)
+                    {
+                        //---- only do this for debugging! ----
+                        //throw error;
+                    }
+                }
+            }
+        }
+
+        draw3dGridLines()
+        {
+            var gl = this._gl;
+            var diCount = this._drawInfos.length;
 
             if (this._view.is3dGridVisible())
             {
@@ -3362,82 +3147,20 @@ module beachParty
 
                 //---- make SHAPES the current program ----
                 gl.useProgram(this._shapesProgram);
-                this._glAttributes.xyz.rebindBuffer();
-            }
 
-            //---- draw shapes ----
-            gl.useProgram(this._shapesProgram);
-
-            var isWireframe = this._view.isWireframe();
-
-            if (this._drawPrimitive === bps.DrawPrimitive.point)
-            {
-                gl.drawArrays(gl.POINTS, 0, this._vertexCount);
-                this.drawHoverShapeOnTop(gl.POINTS);
-            }
-            else if (isWireframe || this._drawPrimitive === bps.DrawPrimitive.line)
-            {
-                gl.drawArrays(gl.LINE_STRIP, 0, this._vertexCount);
-                this.drawHoverShapeOnTop(gl.LINE_STRIP);
-            }
-            else
-            {
-                gl.drawArrays(gl.TRIANGLES, 0, this._vertexCount);
-                this.drawHoverShapeOnTop(gl.TRIANGLES);
+                this._bufferMgr.rebindBuffersAfterProgramSwitch();
             }
         }
 
-        drawHoverShapeOnTop(glPrim)
+        drawAllBuffers()
         {
-            //---- draw hover shape on top ----
-            var hp = this._view.hoverParams();
-            if (hp.hoverEffect !== bps.HoverEffect.none)
+            this.drawShapes();
+
+            //---- known Chrome/Firefox bug workaround: mixing instanced and non-instanced drawing on same ctx ----
+            //---- causes a drawing error here; so, we turn off 3D gridlines for these guys ----
+            if (! this._glInst || vp.utils.isIE)
             {
-                var drawOnTop = false;
-                var hpk = this._view.hoverPrimaryKey();
-                var hvi = this._dataFrame.getVectorIndexByKey(hpk);
-
-                if (hvi > -1)
-                {
-                    var verticesPer = this._verticesPerRecord;
-                    var bufferIndex = hvi * verticesPer;
-
-                    //---- hover stuff ----
-                    var hp = this._view.hoverParams();
-                    var hoverColor = hp.hoverColor;
-
-                    if (!hoverColor || hoverColor === "none" || hp.hoverEffect === bps.HoverEffect.sameColor)
-                    {
-                        hvi = -1;
-                        drawOnTop = true;
-                    }
-                    else
-                    {
-                        var cr3 = vp.color.getColorFromName(hoverColor);
-                        var hRed = cr3[0] / 255;
-                        var hGreen = cr3[1] / 255;
-                        var hBlue = cr3[2] / 255;
-
-                        this._uniforms.hoverColor.setValue(hRed, hGreen, hBlue);
-                        drawOnTop = true;
-                    }
-                }
-
-                //vp.utils.debug("drawHoverShapeOnTop: drawOnTop=" + drawOnTop + ", hoverVectorIndex=" + hri);
-
-                this._uniforms.hoverVectorIndex.setValue(hvi);
-
-                if (drawOnTop)
-                {
-                    //vp.utils.debug("drawing hover record: bufferIndex=" + bufferIndex + ", verticesPer=" + verticesPer);
-
-                    this._gl.drawArrays(glPrim, bufferIndex, verticesPer);
-
-                    if (this._gl.getError())
-                    {
-                        //TODO: Add errors to log.
-                    }
-                }
+                this.draw3dGridLines();
             }
         }
 
@@ -3501,6 +3224,14 @@ module beachParty
 
             //---- top right Z line ----
             this.addGridLine(buffer, x2, y2, z1, x2, y2, z2);
+        }
+
+        forceDomApiCall()
+        {
+            //---- this code is NECESSARY to enable JIT-ing (make a DOM API call) ----
+            var ctxJit = this._view.getContext2d();
+            ctxJit.globalAlpha = this._view.textOpacity();
+            ctxJit.font = "16px Tahoma";
         }
 
         bindGridLinesBuffer()
@@ -3591,7 +3322,7 @@ module beachParty
             width = Math.max(0, width - 2);
             height = Math.max(0, height - 3);
 
-            if (this._hideAxes)
+            if (this._hideAxes === true || this._hideAxes == "x")
             {
                 width -= 22;
                 height -= 15;
@@ -3599,40 +3330,47 @@ module beachParty
                 top += 10;
             }
 
-            let canvas3dElement = $(canvas3dElem);
-
             //---- set bounds of CANVAS3D ----
-            canvas3dElement
+            vp.select(canvas3dElem)
                 .css("left", left + "px")
                 .css("top", top + "px")
                 .attr("width", width)
                 .attr("height", height);
 
-            if (usingFacets)
-            {
-                //---- hide big box ----
-                canvas3dElement
-                    .css("border", "0px solid #555");
-            }
-            else if (this._hideAxes)
-            {
-                //---- not using axes - show full big bix ----
-                canvas3dElement
-                    .css("border", "1px solid #555");
-            }
-            else
-            {
-                //---- using axes - show upper right ----
-                canvas3dElement.css({
-                    "border-left": "0px solid #555",
-                    "border-bottom": "0px solid #555",
-                    "border-top": "1px solid #555",
-                    "border-right": "1px solid #555"
-                });
-            }
+            vp.select(canvas3dElem)
+                .css("border", "0px solid #555");
+
+            //---- everything looks better without the box! ----
+            //var strWidth = "";
+
+            //if (usingFacets)
+            //{
+            //    //---- hide big box ----
+            //    strWidth = "0px";
+            //}
+            //else if (this._hideAxes === true)
+            //{
+            //    strWidth = "1px";
+            //}
+            //else if (this._hideAxes == "x")
+            //{
+            //    strWidth = "0px";
+            //}
+            //else if (this._hideAxes === "y")
+            //{
+            //    strWidth = "0px";
+            //}
+            //else
+            //{
+            //    //---- using axes - show upper right ----
+            //    strWidth = "0px 1px 1px 0px";
+            //}
+            //
+            //vp.select(canvas3dElem)
+            //    .css("border-width", strWidth);
 
             //---- set bounds of CANVAS2D ----
-            $(canvas2dElem)
+            vp.select(canvas2dElem)
                 .css("left", left + "px")
                 .css("top", top + "px")
                 .attr("width", width)
@@ -3686,7 +3424,7 @@ module beachParty
 
             this._isCycleActive = true;
 
-            this._usingPrimaryBuffers = (!this._usingPrimaryBuffers);
+            this._bufferMgr.flipIsUsingPrimaryBuffers();
 
             //---- set time for start of to/from animation ----
             this._toStartTime = vp.utils.now();
@@ -3708,6 +3446,7 @@ module beachParty
             this._lastCycleFrameCount = this._cycleFrameCount;
 
             this._isSmoothLast = this._view.colorMapping().isContinuous;
+            this._isChannelLast = (this._view.colorMapping().channelMapping != null);
             this._opacityLast = this._view.shapeOpacity();
             this._sizeFactorLast = this._view.userSizeFactor();
 
@@ -3725,9 +3464,9 @@ module beachParty
                 this.markBuildNeeded("isFirstFilteredStage");
             }
 
-            vp.utils.debug("onEndOfCycle: cycleFrameCount=" + this._cycleFrameCount +
-                ",  this._isSelectionChangeOnly=" + this._isSelectionChangeOnly +
-                ", continuousDrawing=" + this._isContinuousDrawing);
+            //vp.utils.debug("onEndOfCycle: cycleFrameCount=" + this._cycleFrameCount +
+            //    ",  this._isSelectionChangeOnly=" + this._isSelectionChangeOnly +
+            //    ", continuousDrawing=" + this._isContinuousDrawing);
 
             if (!this._isSelectionChangeOnly)
             {
@@ -3758,7 +3497,7 @@ module beachParty
                 var dataFrame = this._dataFrame;
                 if (!dataFrame)
                 {
-                    dataFrame = this._dataMgr.getDataFrame();
+                    dataFrame = this._dataMgr.getDataFrame()
                 }
 
                 var xm = this._view.xMapping();
@@ -3783,7 +3522,15 @@ module beachParty
                     //performance.mark("afterBuildChart");
                     //performance.measure("buildChartElapsed");
 
+                    //---- make visible after the first chart has been built ----
+                    document.body.style.opacity = "1";
+
                     this._moveFrameCount++;
+
+                    ////---- hide canvas2d until animation is complete ----
+                    //vp.select(this._view.getContext2d())
+                    //    .css("opacity", ".4")
+                    //    .css("transition", "opacity .s ease- in -out")
 
                     if (!this._omitAnimOnNextBuild)
                     {
@@ -3822,7 +3569,7 @@ module beachParty
 
         }
 
-        calcAniPercent()
+       calcAniPercent(forceMax?: boolean)
         {
             var ad = this._animationData;
 
@@ -3843,7 +3590,7 @@ module beachParty
             var toPercentUneased = maxPercent;
             var elapsed = 0;
 
-            if (ad.isAnimationEnabled)
+            if (ad.isAnimationEnabled && ! forceMax)
             {
                 elapsed = now - this._toStartTime;      
                 toPercent = Math.min(maxPercent, elapsed / aniDuration);
@@ -3859,7 +3606,7 @@ module beachParty
 
             //vp.utils.debug("toPercentUneased=" + toPercentUneased);
 
-            if (toPercentUneased === maxPercent && this._isCycleActive)
+            if (toPercentUneased == maxPercent && this._isCycleActive)
             {
                 ////---- cycle ended ----
                 //this.onEndOfCycle(elapsed);
@@ -3870,7 +3617,7 @@ module beachParty
 
             this._toPercentUnflipped = toPercentUneased;
 
-            if (!this._usingPrimaryBuffers)
+            if (!this.isUsingPrimaryBuffers())
             {
                 //---- flip percent ----
                 toPercent = maxPercent - toPercent;
@@ -3880,7 +3627,6 @@ module beachParty
             this._toPercent = toPercent;
             this._toPercentUneased = toPercentUneased;
             this._maxPercent = maxPercent;
-
         }
 
         addToDrawPerf(name: string, start: number)
@@ -3913,10 +3659,10 @@ module beachParty
             {
                 var frameCount = this._frameCount;
                 this._frameRate = Math.floor(frameCount * 1000 / duration);
-                // if (this._frameRate > 80)
-                // {
-                //     var a = 9999;
-                // }
+                if (this._frameRate > 80)
+                {
+                    var a = 9999;
+                }
 
                 this._frameCount = 0;
 
@@ -3937,6 +3683,14 @@ module beachParty
                 }
 
             }
+        }
+
+        getScatterShapeSizeInPixels()
+        {
+            var size = (this._prepassDc) ? this._prepassDc.maxShapeSize : 0;
+            size = this._transformer.worldSizeToScreen(size);
+
+            return size;
         }
 
         captureLastWorld()
@@ -4002,13 +3756,14 @@ module beachParty
 
         drawFrameCore()
         {
+            var windowMgr = this._view._windowMgr;
             var gl = this._gl;
 
             var start = vp.utils.now();
 
             var buildId = this._nextBuildId - 1;
 
-            TraceMgrClass.instance.addTrace("drawFrame", this._chartClass, TraceEventType.start, "f" + buildId + "-" + this._frameCount);
+            addTrace("drawFrame", this._chartClass, TraceEventType.start, "f" + buildId + "-" + this._frameCount);
 
             //---- apply various params that may have changed ----
             glUtils.configDevice(gl, this._frameWidth, this._frameHeight, this._clearColor, this._isBlendingEnabled, this._isCullingEnabled);
@@ -4024,7 +3779,7 @@ module beachParty
 
             start = this.addToDrawPerf("applyUniforms", start);
 
-            if (this._drawPrimitive === bps.DrawPrimitive.smartCube)
+            if (this._drawPrimitive == bps.DrawPrimitive.smartCube)
             {
                 //---- 12 passes over 3 vertices/cube ----
                 for (var i = 0; i < 12; i++)
@@ -4032,19 +3787,19 @@ module beachParty
                     //---- set triangleIndex ----
                     this._uniforms.triangleIndex.setValue(i);
 
-                    this.drawBuffers();
+                    this.drawAllBuffers();
                 }
             }
             else
             {
-                if (!this._usingPointCubes)
+                //if (!this._usingPointCubes)
                 {
                     //---- set triangleIndex ----
                     this._uniforms.triangleIndex.setValue(0);
                 }
 
                 //performance.mark("startDrawBuffers");
-                this.drawBuffers();
+                this.drawAllBuffers();
                 //performance.mark("endDrawBuffers");
                 //performance.measure("drawBuffersElapsed", "startDrawBuffers", "endDrawBuffers");
             }
@@ -4060,11 +3815,16 @@ module beachParty
                     HitTestRect.markCacheBuildNeeded(this._transformer, this._boundingBoxMgr);
                     this._transformer._transformChanged = false;
                 }
+
+                ////---- show canvas2d after animation is complete ----
+                //vp.select(this._view.getContext2d())
+                //    .css("opacity", "1")
+                //    .css("transition", "opacity .4s ease- in -out")
             }
 
             this.onDataChanged("drawFrameCore");
 
-            TraceMgrClass.instance.addTrace("drawFrame", this._chartClass, TraceEventType.end, "f" + buildId + "-" + this._frameCount);
+            addTrace("drawFrame", this._chartClass, TraceEventType.end, "f" + buildId + "-" + this._frameCount);
         }
     }
 
@@ -4128,7 +3888,7 @@ module beachParty
         yCalcName: string;
 
         //---- for consistent/correct access ----
-        layoutFilterVector: number[];
+        layoutFilterVector: Float32Array;
 
         constructor(rcxWorld: Rect3d, facetHelper: FacetHelperClass, nvData: NamedVectors, scales: NamedScales,
             recordCount: number, filteredRecordCount: number, /*attrInfos: any,*/ userSizeFactor: number,
@@ -4228,18 +3988,18 @@ module beachParty
     {
         colType: string;
         colName: string;
-        values: number[];
+        values: Float32Array;
         keyInfo: KeyInfo;           // only set when vector was converted from string
 
-        constructor(values: any, colName: string, colType: string)
+        constructor(values: Float32Array|number[], colName: string, colType: string)
         {
             if (values instanceof Float32Array)
             {
-                this.values = vp.utils.copyArray(values);
-            }
-            else if (values)
-            {
                 this.values = values;
+            }
+            else
+            {
+                this.values = new Float32Array(values);
             }
 
             this.colName = colName;
@@ -4248,7 +4008,9 @@ module beachParty
 
         clone()
         {
-            var nv = new NumericVector(this.values, this.colName, this.colType);
+            var newArray = new Float32Array(this.values);
+
+            var nv = new NumericVector(newArray, this.colName, this.colType);
             nv.keyInfo = this.keyInfo;
 
             return nv;
@@ -4297,27 +4059,6 @@ module beachParty
         }
     }
 
-    export interface IAttributes
-    {
-        xyz?: glUtils.GlAttributeClass;
-        xyz2?: glUtils.GlAttributeClass;
-        colorIndex?: glUtils.GlAttributeClass;
-        colorIndex2?: glUtils.GlAttributeClass;
-        theta?: glUtils.GlAttributeClass;
-        theta2?: glUtils.GlAttributeClass;
-        opacity?: glUtils.GlAttributeClass;
-        opacity2?: glUtils.GlAttributeClass;
-        size?: glUtils.GlAttributeClass;
-        size2?: glUtils.GlAttributeClass;
-        imageIndex?: glUtils.GlAttributeClass;
-        imageIndex2?: glUtils.GlAttributeClass;
-
-        //---- single buffers ----
-        vectorIndex?: glUtils.GlAttributeClass;
-        vertexId?: glUtils.GlAttributeClass;
-        staggerOffset?: glUtils.GlAttributeClass;
-    }
-
     export class NamedVectors
     {
         length: number;
@@ -4326,12 +4067,17 @@ module beachParty
         y: NumericVector;
         z: NumericVector;
 
+        red: NumericVector;
+        green: NumericVector;
+        blue: NumericVector;
+
         colorIndex: NumericVector;
         imageIndex: NumericVector;
         staggerOffset: NumericVector;
         size: NumericVector;
         text: NumericVector;
         facet: NumericVector;
+        aux: NumericVector;             // for SQUARIFY and SUM operations
 
         //---- system data ----
         selected: NumericVector;
@@ -4345,7 +4091,8 @@ module beachParty
 
         constructor(length: number, x?: NumericVector, y?: NumericVector, z?: NumericVector, colorIndex?: NumericVector, imageIndex?: NumericVector,
             staggerOffset?: NumericVector, size?: NumericVector, text?: NumericVector, facet?: NumericVector, selected?: NumericVector,
-            layoutFilter?: NumericVector, enterExitFilter?: NumericVector, primaryKey?: NumericVector, randomX?: NumericVector, randomY?: NumericVector)
+            layoutFilter?: NumericVector, enterExitFilter?: NumericVector, primaryKey?: NumericVector, randomX?: NumericVector, randomY?: NumericVector,
+            red?: NumericVector, green?: NumericVector, blue?: NumericVector, aux?: NumericVector)
         {
             this.length = length;
 
@@ -4364,6 +4111,12 @@ module beachParty
             this.primaryKey = primaryKey;
             this.randomX = randomX;
             this.randomY = randomY;
+
+            this.red = red;
+            this.green = green;
+            this.blue = blue;
+
+            this.aux = aux;
         }
 
         copy(indexes: number[]): NamedVectors
@@ -4374,7 +4127,7 @@ module beachParty
             for (var i = 0; i < keys.length; i++)
             {
                 var key = keys[i];
-                if (key !== "length" && this[key] != null)
+                if (key != "length" && this[key] != null)
                 {
                     var numericVector = <NumericVector>this[key];
                     var vector = numericVector.copy(indexes);
@@ -4391,6 +4144,9 @@ module beachParty
         x: vp.scales.baseScale;
         y: vp.scales.baseScale;
         z: vp.scales.baseScale;
+        red: vp.scales.baseScale;
+        green: vp.scales.baseScale;
+        blue: vp.scales.baseScale;
         size: vp.scales.baseScale;
         colorIndex: vp.scales.baseScale;
         imageIndex: vp.scales.baseScale;
@@ -4400,20 +4156,21 @@ module beachParty
     {
         xyzArray: Float32Array;
         sizeArray: Float32Array;
+        rgbArray: Float32Array;
         colorArray: Float32Array;
         imageIndexArray: Float32Array;
         staggerOffsetArray: Float32Array;
-        opacityArray: Float32Array;
+        //opacityArray: Float32Array;
         thetaArray: Float32Array;
         vertexIdArray: Float32Array;
         vectorIndexArray: Float32Array;
     }
 
-    /** this is data that needs to be transferred between the previous chart instance and the newly created instance. */
+    /** this is data that needs to be transferred between the previous chart instance and the 
+     * newly created instance. */
     export class ChartState
     {
         _glAttributes: glUtils.GlAttributeClass[];
-        _usingPrimaryBuffers: boolean;
         _pkToDrawIndex: any;
         _drawPrimitive: bps.DrawPrimitive;
         _colorFloats: number[];
@@ -4437,6 +4194,9 @@ module beachParty
         _gridLinesProgram: any;
         _rebuildAttrBuffers: boolean;
         _lastVerticesPerRecord: number;
+        _vertexShaderId: string;
+        _fragmentShaderId: string;
+        _bufferMgr: BufferMgrClass;
 
         //---- textures ----
         _texture1: WebGLTexture;
@@ -4446,14 +4206,13 @@ module beachParty
         _mostRecentTexture: WebGLTexture;
         _mostRecentTextureCount = 0;
         _needTextureSwap = false;
-        _imageMappingPalette = null;
+        _shapeMappingPalette = null;
         _texPalette = null;
         _fromBuffersHaveData = null;
 
         constructor()
         {
             this._glAttributes = null;
-            this._usingPrimaryBuffers = null;
             this._pkToDrawIndex = null;
             this._drawPrimitive = null;
             this._colorFloats = null;
@@ -4478,6 +4237,9 @@ module beachParty
             this._gridLinesProgram = null;
             this._rebuildAttrBuffers = false;
             this._lastVerticesPerRecord = null;
+            this._vertexShaderId = null;
+            this._fragmentShaderId = null;
+            this._bufferMgr = null;
 
             //---- textures ----
             this._texture1 = null;
@@ -4487,7 +4249,7 @@ module beachParty
             this._mostRecentTexture = null;
             this._mostRecentTextureCount = null;
             this._needTextureSwap = null;
-            this._imageMappingPalette = null;
+            this._shapeMappingPalette = null;
             this._texPalette = null;
        }
     }
@@ -4506,5 +4268,17 @@ module beachParty
         dist: number;
 
         primaryKey: string;
+    }
+
+    export class DrawInfo
+    {
+        instOffset: number;
+        instCount: number;
+
+        constructor(offset: number, count: number)
+        {
+            this.instOffset = offset;
+            this.instCount = count;
+        }
     }
 }

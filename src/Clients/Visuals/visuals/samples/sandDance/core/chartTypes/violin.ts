@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    sandViolin.ts - builds a unit violin plot (2D histogram, with variable width, with RANDOM layout within each heatmap tile). 
 //-------------------------------------------------------------------------------------
 
@@ -52,6 +52,10 @@ module beachParty
             if (facetHelper)
             {
                 var facetCount = facetHelper.facetCount();
+
+                //---- compute min/max over all data for CONSISTENT facet binning ----
+                ChartUtils.setFilteredMinMaxBreak(xm, dc.layoutFilterVector, dc.nvData.x);
+                ChartUtils.setFilteredMinMaxBreak(ym, dc.layoutFilterVector, dc.nvData.y);
 
                 for (var i = 0; i < facetCount; i++)
                 {
@@ -259,7 +263,7 @@ module beachParty
             this.assignRecordsToBins(nv, xResult, yResult, dc);
         }
 
-        layoutDataForRecord(recordIndex: number, dc: DrawContext)
+        layoutDataForRecord(recordIndex: number, dc: DrawContext, dr: bps.LayoutResult)
         {
             var nv = dc.nvData;
 
@@ -284,24 +288,16 @@ module beachParty
             var binWidth = this._binWidths[countKey];
             var innerLeft = left + (this._maxBinWidth / 2) - (binWidth / 2);
 
-            var x = innerLeft + (xr * binWidth);
-            var y = top - (yr * this._binHeight);
+            dr.x = innerLeft + (xr * binWidth);
+            dr.y = top - (yr * this._binHeight);
+            dr.z = 0;
 
-            var z = 0;
-            //var width = 1;      // scales.width._rangeMin;
-            var width = dc.maxShapeSize * this.scaleColData(nv.size, recordIndex, dc.scales.size, 1);
+            dr.width = dc.maxShapeSize * this.scaleColData(nv.size, recordIndex, dc.scales.size, 1);
+            dr.height = dr.width;
+            dr.depth = dc.defaultDepth2d   
 
-            var height = width;
-            var depth = dc.defaultDepth2d   ;
-
-            var colorIndex = this.scaleColData(nv.colorIndex, recordIndex, dc.scales.colorIndex);
-            var imageIndex = this.scaleColData(nv.imageIndex, recordIndex, dc.scales.imageIndex);
-            var opacity = 1;
-
-            return {
-                x: x, y: y, z: z, width: width, height: height, depth: depth, colorIndex: colorIndex, opacity: opacity,
-                imageIndex: imageIndex, theta: 0,
-            };
+            dr.colorIndex = this.scaleColData(nv.colorIndex, recordIndex, dc.scales.colorIndex);
+            dr.imageIndex = this.scaleColData(nv.imageIndex, recordIndex, dc.scales.imageIndex);
         }
     }
 

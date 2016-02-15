@@ -11,16 +11,18 @@ module beachPartyApp
 
     export class AppClass extends beachParty.DataChangerClass
     {
-        static buildId = "45";           // increment this at last moment before running "vibe10.bat"
+        static buildId = "46.15";           // increment this at last moment before running "vibe10.bat"
+
+        static maxCategoryBins = 999;
+        static maxNumericBins = 999;
+        static maxFacetCategoryBins = 255;
+        static maxFacetNumericBins = 255;
 
         static defaultOpacity = .8;
-        static maxCategoryBins = 50;
         static defaultNumericBins = 9;
         static maxPanelHeight = .85 * window.innerHeight;
         static maxPanelWidth = .9 * window.innerWidth;
         static nextSnapShotNum = 1;
-
-        private isFullscreen: boolean = false;
 
         private settings: AppSettingsMgr;
 
@@ -44,17 +46,21 @@ module beachPartyApp
         _isOrthoCamera = false;
         _useFacets = false;
         _chartName = "Column";//"Flat";
+        _uiChartName = "";
         _layoutName = "Random";
         _bpsHelper: bps.ChartHostHelperClass;
         _sizeFactor = 1;
         _separationFactor = 1;
         _textOpacity = .5;
         _showColorLegend = true;
-        _preloads: bps.Preload[];
+         //_showColorLegend = true;
+        _knownFileParams: bps.Preload[];
+        //_currentFileParams: bps.WorkingDataParams;
         _toPercentOverride = 0;
         _isAnimOverride = false;
         _activeContextMenu: PopupMenuClass;
         _isTransformMode = false;
+        _isDataZoomMode = false;
         _wheelDownTime = 0;
         _searchCol = "";
         _searchValue = "";
@@ -93,6 +99,27 @@ module beachPartyApp
         _autoRebuild = true;
         _actualDrawingPrimitive: bps.DrawPrimitive;
         _prevChartName = null;
+        _clusteringParams: bps.ClusteringParams;
+        _flatParams: bps.FlatParams;
+        _relationMgr: RelationMgrClass;
+        _spiralParams = new bps.SpiralParams();
+        _iconBarBuilt = false;
+        _dtMouseDown = 0;
+        _maxScatterSizeInPixels = 1;            // updated on each draw cycle by plot engine
+        _dragAction = bps.DragAction.select;
+        _panelMgr: PanelMgrClass;
+        _defaultCol = "";
+        _dataToLoadOnInit: string;
+        _tooltipColumns = null;
+        _includeNameInTooltips = true;
+        _bigBarLoc = "top";
+        _fakeLabel: HTMLElement;
+        _initTourName = "FirstTour";
+        _userLogMgr: UserLogMgrClass;
+
+        //---- custom chart ----
+        _isChartCustom = false;
+        _customParams = new bps.CustomParams();
 
         //---- insights ----
         _isInsightLoading = false;
@@ -102,16 +129,10 @@ module beachPartyApp
         //---- feedback panel support ----
         _feedbackType: string;
         _feedbackText: string;
+        _scrubberDialog: ScrubberDialogClass;
 
-        //---- panel management ----
-        _detailsPanel = <JsonPanelClass>null;
-        _sortPanel = <JsonPanelClass>null;
-        _appPanel = <JsonPanelClass>null;
-        _colorPanel = <JsonPanelClass>null;
-        _facetPanel = <JsonPanelClass>null;
-        _chartPanel = <JsonPanelClass>null;
+        //---- todo: move functionality from their wierd class into the new search panel ----
         _slicerPanel = <JsonPanelClass>null;
-        _scrubberDialog = <ScrubberDialogClass>null;
 
         //---- support our APP being hosted in an iframe ----
         _clientAppId = null;
@@ -139,16 +160,17 @@ module beachPartyApp
         _sizeMapping: bps.SizeMappingData;
         _textMapping: bps.TextMappingData;
         _lineMapping: bps.LineMappingData;
-        _imageMapping: bps.ImageMappingData;
+        _shapeMapping: bps.ShapeMappingData;
         _facetMapping: bps.FacetMappingData;
 
         _xMapping: bps.MappingData;
         _yMapping: bps.MappingData;
         _zMapping: bps.MappingData;
+        _auxMapping: bps.MappingData;
 
         _colorLegend: ColorLegendClass;
         _sizeLegend: SizeLegendClass;
-        _imageLegend: ImageLegendClass;
+        _shapeLagend: ShapeLegendClass;
         _textLegend: TextLegendClass;
         _facetLegend: FacetLegendClass;
 
@@ -226,13 +248,21 @@ module beachPartyApp
 
         run()
         {
+            //this.dumpKeyValues();
+
             this.appInit();
 
+            this.createFakeTextElement();
+
             this.buildIconBar();
+            // this.buildFeedbackBar();
+            this.buildInsightBar();
+
+            this._userLogMgr = new UserLogMgrClass();
 
             this.buildBinAdjusters();
 
-            this.buildLegends();
+            this.buildLegends();//For Power BI.
 
             let settings: AppSettingsMgr = this.objectCache.get("settings");
 
@@ -240,11 +270,14 @@ module beachPartyApp
 
             try
             {
-                settings.resetAppSettings();
+                // settings.resetAppSettings();
 
                 // this.processUrlParams();
 
                 this.buildBigBar();
+
+                //---- quick fix to hide disabled entries ----
+                this.markBigBarBuildNeeded();
 
                 settings.loadAppSettings();
             }
@@ -257,6 +290,9 @@ module beachPartyApp
                     settings.isAnimationEnabled(false);
                 }
             }
+
+            //TODO: Can we remove this line ?
+            this.buildLegends();
 
             // Prevent images from being draggable on Firefox [the "draggable" element attribute stops functioning on Firefox if "-moz-user-select: none" is also set]
             // [see http://stackoverflow.com/questions/12906789/preventing-an-image-from-being-draggable-or-selectable-without-using-js]
@@ -299,8 +335,15 @@ module beachPartyApp
                 this._isEngineDrawing = false;
 
                 this._chartCycleNum = msgBlock.cycleNum;
+                this._maxScatterSizeInPixels = msgBlock.maxScatterSizeInPixels;
 
                 var memObj = (<any>window.performance).memory;
+
+                if (!this._testMgr || !this._testMgr._isRunning)
+                {
+                    //---- hide last info/error after successful operation (resulting in chart redraw) ----
+                    this.hideInfoMsg();
+                }
 
                 var msg = msgBlock.cycleNum + ": " + msgBlock.cmdTime + "." + Math.round(msgBlock.buildChartElapsed)
                     + "." + msgBlock.lastCycleFrameRate;
@@ -321,6 +364,11 @@ module beachPartyApp
                 if (!msgBlock.isFirstFilterStage)
                 {
                     this._dataTipMgr.updateDataTipsAfterLayout();
+                }
+                else
+                {
+                    //---- let them stay hidden until end of 2nd stage ----
+                    var dummyStage = 0;
                 }
 
                 //---- if hosted in browser, trigger client's "onPageLoaded" event ----
@@ -381,7 +429,7 @@ module beachPartyApp
                 sd.searchParams = searchParams;
 
                 this._selectionDesc = sd;
-                this.updateSelectionButton("Select", sd);
+                this.updateSelectionButton("Selected", sd, this._selectedCount);
             });
 
             this._bpsHelper.subscribe("contextMenu", true, (msgBlock) =>
@@ -412,6 +460,9 @@ module beachPartyApp
                 vp.utils.debug("client detected chart mouseDown: primaryKey=" + primaryKey);
             });
 
+            this._clusteringParams = new bps.ClusteringParams();
+            this._flatParams = new bps.FlatParams();
+
             this._bpsHelper.subscribe("textDropped", true, (msgBlock) =>
             {
                 this._insightMgr.processDroppedText(msgBlock.text);
@@ -424,72 +475,52 @@ module beachPartyApp
                 this._facetMgr.buildLabels(facetLayouts);
             });
 
+            this._dataTipMgr = new DataTipMgrClass();
+
             this._bpsHelper.subscribe("dataFrameLoaded", true, (msgBlock) =>
             {
-                this._filename = msgBlock.fn;
-                this._recordCount = msgBlock.recordCount;
-                this._colInfos = msgBlock.colInfos;
-                this._origColInfos = msgBlock.origColInfos;
-                this._fileOpenMgr.preload(msgBlock.preload);
-
-                this.closeScrubberDialog();
-
-                this._selectedCount = 0;
-                this._filteredInCount = this._recordCount;
-
-                settings.saveAppSettings();
-
-                // this.resetMappingsForNewFile(); //TODO: remove ?
-
-                this.onDataChanged("dataFrame");
-
-                if (this._isFirstDataFrameLoad)
-                {
-                    this._isFirstDataFrameLoad = false;
-                    this._isLoggingEnabled = true;
-
-                    //---- we set undo=true in this call to make the current app state the base/home state of undoMgr ----
-                    this.logAction(Gesture.none, null, ElementType.none, Action.start, Target.app, true, "machineId", this._machineId, "buildNum", AppClass.buildId);
-
-                    this.makeUIVisible();
-                    this.hookLocalStorageChanges();
-                }
+                this.onDataFrameLoaded(msgBlock);
             });
+
+//             this._bpsHelper.subscribe("selectionChanged", true, (msgBlock) =>
+//             {
+//                 this._selectedCount = msgBlock.selectedCount;
+//                 this.onSelectedCountChanged();
+// 
+//                 this.selectedRecords(msgBlock.selectedRecords);
+// 
+//                 console.warn("changeSource: ", msgBlock.changeSource);
+// 
+//                 // if (vp.utils.isIE)
+//                 // {
+//                 //     //---- bug workaround - force storage event trigger for IE from OUTER HTML (not IFRAME) ----
+//                 //     localStorage["dummy"] = this._sessionId;
+//                 // }
+// 
+//                 if (this._selectedCount === 0)
+//                 {
+//                     this._selectionDesc = null;
+//                 }
+// 
+//                 this.updateSelectionButton("Select", this._selectionDesc);
+// 
+//                 if (msgBlock.changeSource !== "external") {
+//                     setTimeout(() => {
+//                         if (this.onSelectionHandler) {
+//                             this.onSelectionHandler({
+//                                 recordCount: msgBlock.recordCount,
+//                                 selectedCount: msgBlock.selectedCount,
+//                                 selectedRecords: msgBlock.selectedRecords,
+//                                 changeSource: msgBlock.changeSource
+//                             });
+//                         }
+//                     }, 10);
+//                 }
+//             });
 
             this._bpsHelper.subscribe("selectionChanged", true, (msgBlock) =>
             {
-                this._selectedCount = msgBlock.selectedCount;
-                this.onSelectedCountChanged();
-
-                this.selectedRecords(msgBlock.selectedRecords);
-
-                console.warn("changeSource: ", msgBlock.changeSource);
-
-                // if (vp.utils.isIE)
-                // {
-                //     //---- bug workaround - force storage event trigger for IE from OUTER HTML (not IFRAME) ----
-                //     localStorage["dummy"] = this._sessionId;
-                // }
-
-                if (this._selectedCount === 0)
-                {
-                    this._selectionDesc = null;
-                }
-
-                this.updateSelectionButton("Select", this._selectionDesc);
-
-                if (msgBlock.changeSource !== "external") {
-                    setTimeout(() => {
-                        if (this.onSelectionHandler) {
-                            this.onSelectionHandler({
-                                recordCount: msgBlock.recordCount,
-                                selectedCount: msgBlock.selectedCount,
-                                selectedRecords: msgBlock.selectedRecords,
-                                changeSource: msgBlock.changeSource
-                            });
-                        }
-                    }, 10);
-                }
+                this.onSelectionChanged(msgBlock);
             });
 
             this._bpsHelper.subscribe("filteredChanged", true, (msgBlock) =>
@@ -505,49 +536,11 @@ module beachPartyApp
                 //---- alert everyone that should know ----
                 this.onFilteredInCountChanged();
 
-                this.updateSelectionButton("Filter", this._filterDesc);
+                var count = (this._filteredInCount == this._recordCount) ? 0 : this._filteredInCount;
+                this.updateSelectionButton("Filtered", this._filterDesc, count);
 
                 this.onFilterChangedFromEngine();
             });
-
-            var searchTextElem: HTMLInputElement = <HTMLInputElement> $(".searchText", this.container).get(0);
-            searchTextElem.onkeyup = (e) =>
-            {
-                if (e.keyCode === vp.events.keyCodes.enter)
-                {
-                    //---- select all text on ENTER ----
-                    searchTextElem.select();
-
-                    //---- move focus off of text control ----
-
-                    //document.body.focus();
-                }
-
-                this.onSearchClick(e);
-            };
-
-            searchTextElem.onfocus = (e) =>
-            {
-                searchTextElem.select();
-            };
-
-            this.registerForChange("searchValue", (e) =>
-            {
-                //vp.utils.debug("got searchValue event change=" + this._searchValue);
-
-                //---- don't set unless it has actually changes (preserve selection in textbox when possible) ----
-                if (this._searchValue !== searchTextElem.value)
-                {
-                    searchTextElem.value = this._searchValue;
-                }
-            });
-
-//             vp.select(window).attach("resize", (e) => //TODO: remove dependency by window!
-//             {
-//                 this.layoutScreen();
-// 
-//                 this.requestFullChartBuild();
-//             });
 
             $(".stopButton", this.container).on("click", () => {
                 this.stopPlayback();
@@ -571,7 +564,19 @@ module beachPartyApp
                 this.showInsightMenu(e);
             });
 
+//             vp.select(window).attach("resize", (e) =>
+//             {
+//                 this.layoutScreen();
+// 
+//                 this.requestFullChartBuild();
+//             });
+
             this.layoutScreen();
+
+            if (settings.isChartPanelOpen())
+            {
+                this.openChartPanel(true, true);
+            }
 
             if (this._clientAppId)
             {

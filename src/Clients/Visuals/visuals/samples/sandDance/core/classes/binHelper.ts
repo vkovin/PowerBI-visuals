@@ -17,7 +17,8 @@ module beachParty
                 bins: [],
                 colName: "",
                 assignments: [],
-                isTagBinning: false
+                isTagBinning: false,
+                useCategoryForBins: undefined
             };
 
             var colData = nv[colName];
@@ -36,7 +37,7 @@ module beachParty
                 else
                 {
                     //---- BIN the NUMERIC data ----
-                    result = BinHelperNum.createBins(nv, colName, numericBinCount, addIndexes, buildAssignments, formatter, useNiceNumbers,
+                    result = BinHelperNum.createNumBins(nv, colName, numericBinCount, addIndexes, buildAssignments, formatter, useNiceNumbers,
                         md, binSortOptions);
 
                     if (binSortOptions && binSortOptions.sortDirection !== bps.BinSorting.none)
@@ -82,7 +83,8 @@ module beachParty
                 if (key !== "length" && fromNV)
                 {
                     var fromVector = fromNV.values;
-                    var toVector = <any>[];
+                    var toVector = new Float32Array(indexes.length);
+
                     toNV = new NumericVector(toVector, key, fromNV.colType);
 
                     //---- transfer data for this key (named vector) ----
@@ -91,7 +93,7 @@ module beachParty
                         var index = indexes[i];
                         var value = fromVector[index];
 
-                        toVector.push(value);
+                        toVector[i] = value;
                     }
 
                     //---- if STRING, we need to recompute TEXT vector properties: rowsByKey and KeysByRow ---- 
@@ -214,8 +216,11 @@ module beachParty
         /** 0-based indexes of records in this bin. */
         rowIndexes: number[];
 
-        /** indicates this is the first bin of a set.  For numeric/date bins, the first bin includes its minValue.  */
-        isFirst: boolean;
+        /** indicates this is the first bin of a set.  Obsolete.  */
+        //isFirst: boolean;
+
+        /** indicates this is the last bin of a set.  For numeric/date bins, the last bin includes its MAX value.  */
+        isLast: boolean;
 
         /** if true, this is a single bin containing values from all the remaining bins (in current order). */
         isOther: boolean;
@@ -231,7 +236,7 @@ module beachParty
             this.name = name;
             this.count = 0;
             this.rowIndexes = [];
-            this.isFirst = false;
+            this.isLast = false;
             this.isOther = isOther;
             this.otherKeys = otherKeys;
             this.sum = 0;
@@ -279,6 +284,7 @@ module beachParty
         bins: BinInfo[];
         assignments: number[];      // bin numbers for each record number index
         isTagBinning: boolean;
+        useCategoryForBins: boolean;        // when true, numeric bins have been sorted and need category-style labels on axes
     }
 
     export class BinResultNum extends BinResult

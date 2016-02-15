@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    glUniform.ts - small class to manage a webGL uniform.
 //-------------------------------------------------------------------------------------
 
@@ -35,7 +35,7 @@ module glUtils
             this._typeStr = typeStr;
             var setter = null;
 
-            if (typeStr === "li")
+            if (typeStr == "1i")
             {
                 setter = gl.uniform1i;
             }

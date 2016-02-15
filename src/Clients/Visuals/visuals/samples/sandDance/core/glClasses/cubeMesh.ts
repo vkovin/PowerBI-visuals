@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    cubeMesh.ts - defines cube vertices, normals, and triangles.
 //-------------------------------------------------------------------------------------
 

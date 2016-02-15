@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    columnSum.ts - builds a summed sand Column chart (where each item is a rectangle, stacked on top of each other, with height
  //   proportional to y column value.
 //-------------------------------------------------------------------------------------
@@ -57,10 +57,13 @@ module beachParty
             {
                 var facetCount = facetHelper.facetCount();
 
+                //---- compute min/max over all data for consistent facet binning ----
+                ChartUtils.setFilteredMinMaxBreak(xm, dc.layoutFilterVector, dc.nvData.x);
+
                 for (var i = 0; i < facetCount; i++)
                 {
                     var data = nvFacetBuckets[i];
-                    var results = ChartUtils.computeSumForFacet(dc, data, xm, "x", "y");
+                    var results = ChartUtils.computeSumForFacet(dc, data, xm, "x", "aux");
 
                     this._facetBinResults.push(results.binResults);
                     maxPosSum = Math.max(maxPosSum, results.maxPosSum);
@@ -69,7 +72,7 @@ module beachParty
             }
             else
             {
-                var results = ChartUtils.computeSumForFacet(dc, dc.nvData, xm, "x", "y");
+                var results = ChartUtils.computeSumForFacet(dc, dc.nvData, xm, "x", "aux");
 
                 this._facetBinResults.push(results.binResults);
                 maxPosSum = Math.max(maxPosSum, results.maxPosSum);
@@ -107,7 +110,7 @@ module beachParty
 
             //---- mark scale as having pre-computed tickCount ----
             var anyScale = <any>dc.scales.y;
-            anyScale._tickCount = nn.steps + 1;;
+            anyScale._tickCount = nn.steps + 1;
         }
 
         assignRecordsToBins(nv: NamedVectors, resultX, dc: DrawContext)
@@ -139,7 +142,7 @@ module beachParty
                     }
 
                     //---- calculate the relative height of this item ----
-                    var itemHeight = nv.y.values[vectorIndex];      
+                    var itemHeight = nv.aux.values[vectorIndex];      
 
                     itemHeights[vectorIndex] = itemHeight;
 
@@ -229,7 +232,7 @@ module beachParty
             }
         }
 
-        layoutDataForRecord(itemIndex: number, dc: DrawContext)
+        layoutDataForRecord(itemIndex: number, dc: DrawContext, dr: bps.LayoutResult)
         {
             var nv = dc.nvData;
             var visibleIndex = 0;
@@ -252,25 +255,19 @@ module beachParty
             var trueHeight = Math.abs(heightFactor * this._itemHeights[itemIndex]);
 
             //---- layout as STACKED rectangles ----
-            var x = left + this._binWidth / 2;          // place at horizontal center of shape
-            var y = bottom + (heightFactor * this._itemBottoms[itemIndex]);
+            dr.x = left + this._binWidth / 2;          // place at horizontal center of shape
+            dr.y = bottom + (heightFactor * this._itemBottoms[itemIndex]);
 
-            y += trueHeight / 2;                        // place at vertical center of shape
+            dr.y += trueHeight / 2;                        // place at vertical center of shape
 
-            var z = 0;
+            dr.z = 0;
 
-            var height = inverseSizeFactor * trueHeight;
-            var width = inverseSizeFactor * this._binWidth;      
-            var depth = dc.defaultDepth2d;      // test out 3d cube in a 2d shape;
+            dr.height = inverseSizeFactor * trueHeight;
+            dr.width = inverseSizeFactor * this._binWidth;
+            dr.depth = dc.defaultDepth2d;      // test out 3d cube in a 2d shape
 
-            var colorIndex = this.scaleColData(nv.colorIndex, itemIndex, dc.scales.colorIndex);
-            var imageIndex = this.scaleColData(nv.imageIndex, itemIndex, dc.scales.imageIndex);
-            var opacity = 1;
-
-            return {
-                x: x, y: y, z: z, width: width, height: height, depth: depth, colorIndex: colorIndex, opacity: opacity,
-                imageIndex: imageIndex, theta: 0,
-            };
+            dr.colorIndex = this.scaleColData(nv.colorIndex, itemIndex, dc.scales.colorIndex);
+            dr.imageIndex = this.scaleColData(nv.imageIndex, itemIndex, dc.scales.imageIndex);
         }
     }
 }

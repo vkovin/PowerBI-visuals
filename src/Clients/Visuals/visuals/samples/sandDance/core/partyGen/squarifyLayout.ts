@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    squarifyLayout.ts - lays out items in a single-level squarified treemap.
 //    adapted from: "Squarified Treemaps" paper by Mark Bruls, et al.  
 //    http://www.win.tue.nl/~vanwijk/stm.pdf

@@ -14,7 +14,7 @@ module beachPartyApp
     {
         _stack: UndoEntry[] = [];
         _index = -1;
-        _maxUndoLevels = 100;
+        _maxUndoLevels = 10;              // keep this low until we can guarantee tiny UndoEntry sizes (right now they get big with selected/filtered vectors)
         //_initEntry = null;              // this is an entry created from the initial (and stable) app state 
 
         constructor()

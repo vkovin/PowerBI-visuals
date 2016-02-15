@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    densityRandom.ts - builds a density chart (2D histogram, with RANDOM layout within each heatmap tile). 
 //-------------------------------------------------------------------------------------
 
@@ -218,9 +218,11 @@ module beachParty
             this.assignRecordsToBins(nv, xResult, yResult, dc);
         }
 
-        layoutDataForRecord(recordIndex: number, dc: DrawContext)
+        layoutDataForRecord(recordIndex: number, dc: DrawContext, dr: bps.LayoutResult)
         {
             var nv = dc.nvData;
+
+            var layoutFilterVector = dc.layoutFilterVector;
 
             var filtered = (dc.layoutFilterVector && dc.layoutFilterVector[recordIndex]);
             var rowIndex = 0;
@@ -240,24 +242,17 @@ module beachParty
 
             var xr = nv.randomX.values[recordIndex];
             var yr = nv.randomY.values[recordIndex];
-            var x = left + xr * this._itemWidth;
-            var y = top - yr * this._itemHeight;
 
-            var z = 0;
-            //var width = 1;      // scales.width._rangeMin;
-            var width = dc.maxShapeSize * this.scaleColData(nv.size, recordIndex, dc.scales.size, 1);
+            dr.x = left + xr * this._itemWidth;
+            dr.y = top - yr * this._itemHeight;
+            dr.z = 0;
 
-            var height = width;
-            var depth = dc.defaultDepth2d   ;
+            dr.width = dc.maxShapeSize * this.scaleColData(nv.size, recordIndex, dc.scales.size, 1);
+            dr.height = dr.width;
+            dr.depth = dc.defaultDepth2d   
 
-            var colorIndex = this.scaleColData(nv.colorIndex, recordIndex, dc.scales.colorIndex);
-            var imageIndex = this.scaleColData(nv.imageIndex, recordIndex, dc.scales.imageIndex);
-            var opacity = 1;
-
-            return {
-                x: x, y: y, z: z, width: width, height: height, depth: depth, colorIndex: colorIndex, opacity: opacity,
-                imageIndex: imageIndex, theta: 0,
-            };
+            dr.colorIndex = this.scaleColData(nv.colorIndex, recordIndex, dc.scales.colorIndex);
+            dr.imageIndex = this.scaleColData(nv.imageIndex, recordIndex, dc.scales.imageIndex);
         }
     }
 

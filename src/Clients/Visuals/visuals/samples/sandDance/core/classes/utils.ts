@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    utils.ts - simple utils for this prototype.
 //-------------------------------------------------------------------------------------
 
@@ -239,13 +239,14 @@ module utils
 
         if (vp.utils.isString(value))
         {
-            bValue = (value.toLowerCase() === "true");
+            var str = value.toLowerCase();
+            bValue = (str == "true" || str == "1");
         }
 
         return <boolean>bValue;
     }
 
-    export function getMinMax(dataNumVector: beachParty.NumericVector, filterNumVector: beachParty.NumericVector)
+    export function getMinMax(dataNumVector: beachParty.NumericVector, filterNumVector: beachParty.NumericVector, md: bps.MappingData)
     {
         var min = Number.MAX_VALUE;
         var max = -Number.MAX_VALUE;
@@ -279,6 +280,25 @@ module utils
             max = 1;
         }
 
+        if (md.minBreak !== undefined)
+        {
+            min = md.minBreak;
+        }
+        else if (md.minBreakFacet !== undefined)
+        {
+            min = md.minBreakFacet;
+        }
+
+        if (md.maxBreak !== undefined)
+        {
+            max = md.maxBreak;
+        }
+        else if (md.maxBreakFacet !== undefined)
+        {
+            max = md.maxBreakFacet;
+        }
+
+
         return { min: min, max: max };
     }
 
@@ -303,21 +323,21 @@ module utils
                 .categoryKeys(catKeys)
                 .range(rangeMin, rangeMax);
         }
-        else if (colType === "date")
+         else if (colType == "date")
         {
-            var result = getMinMax(dataVector, filterVector);
+            var result = getMinMax(dataVector, filterVector, md);
 
             //---- create DATE scale ----
             var scale = vp.scales.createDate()
                 .domainMin(result.min)
                 .domainMax(result.max)
                 .rangeMin(rangeMin)
-                .rangeMax(rangeMax);
+                .rangeMax(rangeMax)
         }
         else      
         {
             //---- create LINEAR scale ---
-            var result = getMinMax(dataVector, filterVector);
+            var result = getMinMax(dataVector, filterVector, md);
 
             if (!dataVector)
             {
@@ -329,7 +349,7 @@ module utils
                 .domainMin(result.min)
                 .domainMax(result.max)
                 .rangeMin(rangeMin)
-                .rangeMax(rangeMax);
+                .rangeMax(rangeMax)
         }
 
         this.buildFormatter(md, scale, colType);
@@ -379,7 +399,7 @@ module utils
             else
             {
                 //---- get min/max from data ----
-                var result = getMinMax(dataVector, filterVector);
+                var result = getMinMax(dataVector, filterVector, md);
 
                 minVal = result.min;
                 maxVal = result.max;
@@ -504,154 +524,154 @@ module utils
     }
 
     /** store SearchParams data on the specified element so it can later be used for a search operation. */
-    export function prepElementForSearch(element: any, colName: string, scale: any, binResults: any, index, lastValue: any, isCat: boolean,
-        record: any, id: string)
-    {
-        if (binResults)
-        {
-            var bin = (binResults) ? (binResults.bins[index]) : null;
-
-            if ((isCat || scale._useCategoryForBins) && id === "label")
-            {
-                utils.prepWithBinDirect(element, colName, isCat, bin, id);
-            }
-            else
-            {
-                lastValue = utils.prepWithBinLast(element, colName, lastValue, bin, isCat, id);
-            }
-        }
-        else
-        {
-            var firstBucket = (bin) ? bin.isFirst : (index === 1);
-            var value = record.breakValue;
-
-            lastValue = utils.prepWithValueLast(element, colName, lastValue, value, isCat, firstBucket, id);
-        }
-
-        return lastValue;
-    }
-
-    /** store SearchParams data on the specified element so it can later be used for a search operation. This API is called once for each bin. */
-    export function prepWithBinDirect(elem: any, colName: string, isCategory: boolean, bin: beachParty.BinInfo, id: string)
-    {
-        var sp = <SearchParamsEx>{};
-        var firstBucket = bin.isFirst;
-        sp.buttonType = id;
-
-        if (!bin)
-        {
-            throw "bin must be supplied";
-        }
-
-        if (bin.isTagBin)
-        {
-            colName = "_primaryKey";
-            sp.searchRawValues = true;
-        }
-
-        sp.colName = colName;
-        sp.searchType = bps.TextSearchType.exactMatch;
-
-        if (isCategory)
-        {
-            var value = <any> bin.name;
-
-            //---- CATEGORY ----
-            if (bin.otherKeys)
-            {
-                value = bin.otherKeys;
-            }
-
-            sp.minValue = value;
-            sp.maxValue = null;
-        }
-        else
-        {
-            //---- NUMERIC or DATE ----
-            var numBin = <beachParty.BinInfoNum>bin;
-
-            sp.minValue = numBin.min;
-            sp.maxValue = numBin.max;
-
-            if (sp.minValue === null || sp.minValue === undefined)
-            {
-                //---- first label or first half of first bucket ----
-                sp.searchType = bps.TextSearchType.exactMatch;
-            }
-            else if (firstBucket)  
-            {
-                //---- first bucket INCLUDES the minValue ----
-                sp.searchType = bps.TextSearchType.betweenInclusive;
-            }
-            else
-            {
-                //---- normal bucket EXCLUDES the minValue ----
-                sp.searchType = bps.TextSearchType.gtrValueAndLeqValue2;
-            }
-        }
-
-        //vp.utils.debug("prepWithBinDirect: id=" + id + ", colName=" + colName + 
-        //    ", sp.minValue=" + sp.minValue + ", sp.maxValue=" + sp.maxValue + ", sp.searchType=" + sp.searchType);
-
-        elem._searchParams = sp;
-    }
+//     export function prepElementForSearch(element: any, colName: string, scale: any, binResults: any, index, lastValue: any, isCat: boolean,
+//         record: any, id: string)
+//     {
+//         if (binResults)
+//         {
+//             var bin = (binResults) ? (binResults.bins[index]) : null;
+// 
+//             if ((isCat || scale._useCategoryForBins) && id === "label")
+//             {
+//                 utils.prepWithBinDirect(element, colName, isCat, bin, id);
+//             }
+//             else
+//             {
+//                 lastValue = utils.prepWithBinLast(element, colName, lastValue, bin, isCat, id);
+//             }
+//         }
+//         else
+//         {
+//             var firstBucket = (bin) ? bin.isFirst : (index === 1);
+//             var value = record.breakValue;
+// 
+//             lastValue = utils.prepWithValueLast(element, colName, lastValue, value, isCat, firstBucket, id);
+//         }
+// 
+//         return lastValue;
+//     }
+// 
+//     /** store SearchParams data on the specified element so it can later be used for a search operation. This API is called once for each bin. */
+//     export function prepWithBinDirect(elem: any, colName: string, isCategory: boolean, bin: beachParty.BinInfo, id: string)
+//     {
+//         var sp = <SearchParamsEx>{};
+//         var firstBucket = bin.isFirst;
+//         sp.buttonType = id;
+// 
+//         if (!bin)
+//         {
+//             throw "bin must be supplied";
+//         }
+// 
+//         if (bin.isTagBin)
+//         {
+//             colName = "_primaryKey";
+//             sp.searchRawValues = true;
+//         }
+// 
+//         sp.colName = colName;
+//         sp.searchType = bps.TextSearchType.exactMatch;
+// 
+//         if (isCategory)
+//         {
+//             var value = <any> bin.name;
+// 
+//             //---- CATEGORY ----
+//             if (bin.otherKeys)
+//             {
+//                 value = bin.otherKeys;
+//             }
+// 
+//             sp.minValue = value;
+//             sp.maxValue = null;
+//         }
+//         else
+//         {
+//             //---- NUMERIC or DATE ----
+//             var numBin = <beachParty.BinInfoNum>bin;
+// 
+//             sp.minValue = numBin.min;
+//             sp.maxValue = numBin.max;
+// 
+//             if (sp.minValue === null || sp.minValue === undefined)
+//             {
+//                 //---- first label or first half of first bucket ----
+//                 sp.searchType = bps.TextSearchType.exactMatch;
+//             }
+//             else if (firstBucket)  
+//             {
+//                 //---- first bucket INCLUDES the minValue ----
+//                 sp.searchType = bps.TextSearchType.betweenInclusive;
+//             }
+//             else
+//             {
+//                 //---- normal bucket EXCLUDES the minValue ----
+//                 sp.searchType = bps.TextSearchType.gtrValueAndLeqValue2;
+//             }
+//         }
+// 
+//         //vp.utils.debug("prepWithBinDirect: id=" + id + ", colName=" + colName + 
+//         //    ", sp.minValue=" + sp.minValue + ", sp.maxValue=" + sp.maxValue + ", sp.searchType=" + sp.searchType);
+// 
+//         elem._searchParams = sp;
+//     }
 
     /** store SearchParams data on the specified element so it can later be used for a search operation. */
-    export function prepWithBinLast(elem: any, colName: string, lastBin: any, currBin: beachParty.BinInfo,
-        isCategory: boolean, id: string)
-    {
-        var sp = <SearchParamsEx> {};
-        sp.colName = colName;
-        sp.searchType = bps.TextSearchType.exactMatch;
-        sp.buttonType = id;
-
-        var newLastBin = currBin;
-
-        if (lastBin)
-        {
-            var firstBucket = lastBin.isFirst;
-
-            if (isCategory)
-            {
-                var currValue = <any> lastBin.name;
-
-                //---- CATEGORY ----
-                if (lastBin.otherKeys)
-                {
-                    currValue = lastBin.otherKeys;
-                }
-
-                sp.minValue = currValue;
-                sp.maxValue = null;
-            }
-            else
-            {
-                //---- NUMERIC or DATE ----
-                var numBin = <beachParty.BinInfoNum>lastBin;
-
-                sp.minValue = numBin.min;
-                sp.maxValue = numBin.max;
-
-                if (firstBucket)  
-                {
-                    //---- first bucket INCLUDES the minValue ----
-                    sp.searchType = bps.TextSearchType.betweenInclusive;
-                }
-                else
-                {
-                    //---- normal bucket EXCLUDES the minValue ----
-                    sp.searchType = bps.TextSearchType.gtrValueAndLeqValue2;
-                }
-            }
-        }
-
-        //vp.utils.debug("prepWithBinLast: id=" + id + ", colName=" + colName + 
-        //    ", sp.minValue=" + sp.minValue + ", sp.maxValue=" + sp.maxValue + ", sp.searchType=" + sp.searchType);
-
-        elem._searchParams = sp;
-
-        return newLastBin;
-    }
+//     export function prepWithBinLast(elem: any, colName: string, lastBin: any, currBin: beachParty.BinInfo,
+//         isCategory: boolean, id: string)
+//     {
+//         var sp = <SearchParamsEx> {};
+//         sp.colName = colName;
+//         sp.searchType = bps.TextSearchType.exactMatch;
+//         sp.buttonType = id;
+// 
+//         var newLastBin = currBin;
+// 
+//         if (lastBin)
+//         {
+//             var firstBucket = lastBin.isFirst;
+// 
+//             if (isCategory)
+//             {
+//                 var currValue = <any> lastBin.name;
+// 
+//                 //---- CATEGORY ----
+//                 if (lastBin.otherKeys)
+//                 {
+//                     currValue = lastBin.otherKeys;
+//                 }
+// 
+//                 sp.minValue = currValue;
+//                 sp.maxValue = null;
+//             }
+//             else
+//             {
+//                 //---- NUMERIC or DATE ----
+//                 var numBin = <beachParty.BinInfoNum>lastBin;
+// 
+//                 sp.minValue = numBin.min;
+//                 sp.maxValue = numBin.max;
+// 
+//                 if (firstBucket)  
+//                 {
+//                     //---- first bucket INCLUDES the minValue ----
+//                     sp.searchType = bps.TextSearchType.betweenInclusive;
+//                 }
+//                 else
+//                 {
+//                     //---- normal bucket EXCLUDES the minValue ----
+//                     sp.searchType = bps.TextSearchType.gtrValueAndLeqValue2;
+//                 }
+//             }
+//         }
+// 
+//         //vp.utils.debug("prepWithBinLast: id=" + id + ", colName=" + colName + 
+//         //    ", sp.minValue=" + sp.minValue + ", sp.maxValue=" + sp.maxValue + ", sp.searchType=" + sp.searchType);
+// 
+//         elem._searchParams = sp;
+// 
+//         return newLastBin;
+//     }
 
     export function isImageFile(fn: string)
     {
@@ -774,73 +794,129 @@ module utils
     }
 
     /** store SearchParams data on the specified element so it can later be used for a search operation. */
-    export function prepWithValueLast(elem: any, colName: string, lastValue: any, currValue: any,
-        isCategory: boolean, firstBucket: boolean, id: string)
+//     export function prepWithValueLast(elem: any, colName: string, lastValue: any, currValue: any,
+//         isCategory: boolean, firstBucket: boolean, id: string)
+//     {
+//         var sp = <SearchParamsEx>{};
+//         var newLastValue = currValue;
+//         sp.buttonType = id;
+// 
+//         sp.colName = colName;
+//         sp.searchType = bps.TextSearchType.exactMatch;
+// 
+//         if (isCategory)
+//         {
+//             //---- CATEGORY ----
+//             sp.minValue = lastValue;
+//             sp.maxValue = null;
+//         }
+//         else
+//         {
+//             //---- NUMERIC or DATE ----
+//             sp.minValue = lastValue;
+//             sp.maxValue = currValue;
+// 
+//             if (sp.minValue !== sp.maxValue)
+//             {
+//                 if (lastValue === null || lastValue === undefined)
+//                 {
+//                     //---- first label or first half of first bucket ----
+//                     sp.searchType = bps.TextSearchType.exactMatch;
+//                 }
+//                 else
+//                 {
+//                     //---- when bins are sorted, this can happen ----
+//                     if (sp.minValue > sp.maxValue)
+//                     {
+//                         var temp = sp.minValue;
+//                         sp.minValue = sp.maxValue;
+//                         sp.maxValue = temp;
+//                     }
+// 
+//                     if (firstBucket)  
+//                     {
+//                         //---- first bucket INCLUDES the minValue ----
+//                         sp.searchType = bps.TextSearchType.betweenInclusive;
+//                     }
+//                     else
+//                     {
+//                         //---- normal bucket EXCLUDES the minValue ----
+//                         sp.searchType = bps.TextSearchType.gtrValueAndLeqValue2;
+//                     }
+//                 }
+//             }
+//         }
+// 
+//         //vp.utils.debug("prepWithValueLast: id=" + id + ", colName=" + colName + 
+//         //    ", sp.minValue=" + sp.minValue + ", sp.maxValue=" + sp.maxValue + ", sp.searchType=" + sp.searchType);
+// 
+//         elem._searchParams = sp;
+// 
+//         return newLastValue;
+//     }
+
+    export function arrayToString(aray: string[], delim: string)
     {
-        var sp = <SearchParamsEx>{};
-        var newLastValue = currValue;
-        sp.buttonType = id;
+        var str = "";
 
-        sp.colName = colName;
-        sp.searchType = bps.TextSearchType.exactMatch;
-
-        if (isCategory)
+        for (var i = 0; i < aray.length; i++)
         {
-            //---- CATEGORY ----
-            sp.minValue = lastValue;
-            sp.maxValue = null;
-        }
-        else
-        {
-            //---- NUMERIC or DATE ----
-            sp.minValue = lastValue;
-            sp.maxValue = currValue;
-
-            if (sp.minValue !== sp.maxValue)
+            if (str != "")
             {
-                if (lastValue === null || lastValue === undefined)
-                {
-                    //---- first label or first half of first bucket ----
-                    sp.searchType = bps.TextSearchType.exactMatch;
-                }
-                else
-                {
-                    //---- when bins are sorted, this can happen ----
-                    if (sp.minValue > sp.maxValue)
-                    {
-                        var temp = sp.minValue;
-                        sp.minValue = sp.maxValue;
-                        sp.maxValue = temp;
-                    }
-
-                    if (firstBucket)  
-                    {
-                        //---- first bucket INCLUDES the minValue ----
-                        sp.searchType = bps.TextSearchType.betweenInclusive;
-                    }
-                    else
-                    {
-                        //---- normal bucket EXCLUDES the minValue ----
-                        sp.searchType = bps.TextSearchType.gtrValueAndLeqValue2;
-                    }
-                }
+                str += delim;
             }
+
+            str += aray[i];
+        }
+        return str;
+    }
+
+    export function stringToArray(value: string, delim: string)
+    {
+        var parts = [];
+
+        if (value)
+        {
+            parts = value.split(delim);
         }
 
-        //vp.utils.debug("prepWithValueLast: id=" + id + ", colName=" + colName + 
-        //    ", sp.minValue=" + sp.minValue + ", sp.maxValue=" + sp.maxValue + ", sp.searchType=" + sp.searchType);
-
-        elem._searchParams = sp;
-
-        return newLastValue;
+        return parts;
     }
 
     export class SearchParamsEx extends bps.SearchParams
     {
-        buttonType: string;           // type of button being clicked
-        //colName: string;
-        //minValue: any;
-        //maxValue: any;
-        //searchType: bps.TextSearchType;
+        buttonType: string;           // type of button being clicked ("tick" or "bar")
+        buttonIndex: number;          // index of button in axis/legend
+        axisName: string;             // name of axis/legend
+    }
+
+    /**
+     *  The expression is parsed to ensure it only contains:
+        - contant numbers and strings
+        - standard JavaScript Math/Date/String functions
+        - variables from "allowVariableList".
+     * @param expression
+     * @param allowedVariableList
+     */
+    export function isSafeExpression(expression: string, allowedVariableList: string[])
+    {
+        //---- TODO: add parser code here to validate expression as safe ----
+        return false;
+    }
+
+    /**
+     *  Returns a function that be called to evaluate the specified expression. 
+     * @param expression
+     */
+    export function safeEval(expression: string, allowedVariableList: string[])
+    {
+        var str = "return " + expression;
+        if (!utils.isSafeExpression(expression, allowedVariableList))
+        {
+            throw "unsafe expression passed to safeEval()";
+        }
+
+        var func = new Function(str);
+        return func;
     }
 }

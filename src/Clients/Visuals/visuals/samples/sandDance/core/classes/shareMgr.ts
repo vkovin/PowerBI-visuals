@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    shareMgr - manages sharing of selection and other information among multiple BeachParty sessions.
 //-------------------------------------------------------------------------------------
 
@@ -42,30 +42,26 @@ module beachParty
             //    win = (parent || window.opener || window);
             //}
 
-            vp.events.attach(win, "storage", (e) =>
+            LocalStorageMgr.hookChanges((e) =>
             {
                 //vp.utils.debug("******* shareMgr.changeFunc: e.key=" + e.key);
 
-                TraceMgrClass.instance.addTrace("localStorage", e.key, TraceEventType.point);
+                addTrace("localStorage", e.key, TraceEventType.point);
 
-                if (e.key === this._itemId)
+                var myKey = LocalStorageMgr.makeKey(StorageType.sessionShare, StorageSubType.selectionChange,
+                    this._fn, null);
+
+                if (e.key == myKey)
                 {
                     this.processStorageChangedRecord(e.newValue);
                 }
             });
         }
 
-        /** this simulates a local storage change. */
-        onLocalStorageChange()
-        {
-            // var json = localStorage.getItem(this._itemId);
-            // this.processStorageChangedRecord(json);
-        }
-
         public setFilename(fn: string)
         {
             this._fn = fn;
-            this._itemId = "session-" + fn;
+            //this._itemId = "session-" + fn;
 
             //vp.utils.debug("shareName set to: " + this._itemId);
 
@@ -92,14 +88,28 @@ module beachParty
             }
         }
 
+        /** this simulates a local storage change. */
+        onLocalStorageChange()
+        {
+            var strJson = LocalStorageMgr.get(StorageType.sessionShare, StorageSubType.selectionChange,
+                this._fn);
+
+            if (strJson)
+            {
+                this.processStorageChangedRecord(strJson);
+            }
+        }
+
         public setSelection(selectedPrimaryKeys: string[])
         {
-//             var sd = new ShareStateData(this._sessionId, this._changeNumber++, this._fn, selectedPrimaryKeys);
-//             // var jsonStr = JSON.stringify(sd);
-// 
-//             // localStorage.setItem(this._itemId, jsonStr);
-// 
-//             vp.utils.debug("shareMgr.setSelection: fn=" + this._fn);
+            var sd = new ShareStateData(this._sessionId, this._changeNumber++, this._fn,
+                selectedPrimaryKeys);
+            var jsonStr = JSON.stringify(sd);
+
+            LocalStorageMgr.save(StorageType.sessionShare, StorageSubType.selectionChange,
+                this._fn, jsonStr
+            );
+            vp.utils.debug("shareMgr.setSelection: fn=" + this._fn);
         }
     }
 

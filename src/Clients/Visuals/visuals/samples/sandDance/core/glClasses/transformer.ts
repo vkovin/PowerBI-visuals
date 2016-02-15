@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    transformer.ts - manages the projection, view, and world matrices for a visualization.
 //-------------------------------------------------------------------------------------
 
@@ -191,10 +191,10 @@ module beachParty
             var ptNear = TransformerClass.unprojectXna(vp.geom.createVector3(875, 575, 0), width, height, matWorld, matView, matProjection);
             var ptFar = TransformerClass.unprojectXna(vp.geom.createVector3(875, 575, .9999), width, height, matWorld, matView, matProjection);
 
-            vp.utils.debug("------------------");
-            vp.utils.debug("ptNear: " + ptNear);
-            vp.utils.debug("ptFar: " + ptFar);
-            vp.utils.debug("------------------");
+            // vp.utils.debug("------------------");
+            // vp.utils.debug("ptNear: " + ptNear);
+            // vp.utils.debug("ptFar: " + ptFar);
+            // vp.utils.debug("------------------");
         }
 
         public getProjection()
@@ -275,6 +275,15 @@ module beachParty
 
             return screenPos;
 
+        }
+
+        public transformPtWithMatrix(x: number, y: number, z: number, mat)
+        {
+            var pt = new Float32Array(3);
+            vec3.transformMat4(pt, [x, y, z], mat);
+
+            var pos3x = vp.geom.createPoint3(pt[0], pt[1], pt[2]);
+            return pos3x;
         }
 
         /** map a point from MODEL space to NDC space (-1 to 1). */
@@ -641,10 +650,17 @@ module beachParty
             return new vp.geom.vector3(newX, newY, newZ);
         }
 
-        public scaleMatrix(factor: number, mousePos: any)
+        public scaleMatrix(factor: number, mousePos: any, isMousePosInWorldUnits?: boolean)
         {
-            //---- map mouse position from screen to world coordinates ----
-            var modelPos = this.unprojectFromScreen(mousePos.x, mousePos.y);
+            if (isMousePosInWorldUnits)
+            {
+                var modelPos = <vp.geom.point3> { x: mousePos.x, y: mousePos.y, z: mousePos.z };
+            }
+            else
+            {
+                //---- map mouse position from screen to world coordinates ----
+                var modelPos = this.unprojectFromScreen(mousePos.x, mousePos.y);
+            }
             
             this.scaleMatrixAt(factor, modelPos);
         }

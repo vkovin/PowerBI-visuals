@@ -21,7 +21,7 @@ interface Array<T> {
     sum(itemFunc?: any): number;
     take(amt: any): T[];
     toArray(): number[];
-    insert?(index: number | any, value: any): void;
+    insert(index: number, value: any): void;
     where(itemFunc?: any): T[];
 }
 /** used to extend array class with new functions. */
@@ -163,7 +163,7 @@ declare module vp.animation {
         children(): any[];
         animateFrameCore(percent: number, startingChildIndex?: number): void;
         stop(): boolean;
-        onAnimationComplete(arg: any): animationClass;
+        onAnimationComplete(arg: any): this;
         onFrame(arg: any): any;
         private onAnimationStopped(wasCancelled?);
         duration(): number;
@@ -309,7 +309,7 @@ declare module vp.animation {
         hookTransitionEvents(): void;
         /** will stop all animations associated with this mgr. */
         clearActiveAnimations(): void;
-        setData(newData: any, isNewDataSet?: boolean, newDataId?: any): dataAnimMgrClass;
+        setData(newData: any, isNewDataSet?: boolean, newDataId?: any): this;
         /** this is only called from layers that support series plotting.  It should be called after setData(), but before
         updateShapes().  */
         setSeriesNames(value: string[]): void;
@@ -338,7 +338,7 @@ declare module vp.animation {
         keyFunc(): any;
         keyFunc(value: any): dataAnimMgrClass;
         getExistingShapes(): any[];
-        statsCallback(value: any): dataAnimMgrClass;
+        statsCallback(value: any): this;
     }
 }
 declare module vp.animation {
@@ -552,12 +552,12 @@ declare module vp.chartFrame {
             width: number;
             height: number;
         };
-        horizontalTickShader(element: any, record: any, index: any, isNew: any, xStart: number, length: number, y: number): void;
-        horizontalTickBoxShader(element: any, record: any, index: any, isNew: any, xStart: number, length: number, yRecord: any): void;
-        verticalTickShader(element: any, record: any, index: any, isNew: any, yStart: number, length: number, x: number): void;
-        verticalTickBoxShader(element: any, record: any, index: any, isNew: any, yStart: number, length: number, xRecord: any): void;
+        horizontalTickShader(element: any, record: any, index: any, isNew: any, xStart: number, length: number, y: number, isLastNew: boolean): void;
+        horizontalTickBoxShader(element: any, record: any, index: any, isNew: any, xStart: number, length: number, yRecord: any, isLastNew: boolean): void;
+        verticalTickShader(element: any, record: any, index: any, isNew: any, yStart: number, length: number, x: number, isLastNew: boolean): void;
+        verticalTickBoxShader(element: any, record: any, index: any, isNew: any, yStart: number, length: number, xRecord: any, isLastNew: boolean): void;
         rootElem(): any;
-        translate(x: number, y: number, isCrispAdjustment?: boolean): axisBaseClass<T>;
+        translate(x: number, y: number, isCrispAdjustment?: boolean): this;
         rotateText45(text: string, wrapElem: any, alignTo: vp.chartFrame.LabelLocation, angle: number, drawParams: vp.marks.ITextDrawingParams, fakeLabel: SVGTextElement): vp.geom.ISize;
         getRotateSize45(width: number, height: number): {
             width: number;
@@ -569,7 +569,7 @@ declare module vp.chartFrame {
         labelSizes(value: any): T;
         getActualMaxPerpendicularSize(): number;
         getAvailablePixelsPerLabelForTruncation(actualLabelRotation: number): number;
-        shadeTextLabel(index: number, element: any, cx: number, cy: number, text: string, hAlign: string, vAlign: string, alignTo: LabelLocation, returnWidth: boolean, availPixelsPerLabel: number): number;
+        shadeTextLabel(index: number, element: any, cx: number, cy: number, text: string, hAlign: string, vAlign: string, alignTo: LabelLocation, returnWidth: boolean, availPixelsPerLabel: number, isLastNew: boolean): number;
         getLabelBounds(index: number, x: number, y: number, hAlign: string): {
             x: number;
             y: number;
@@ -781,7 +781,7 @@ declare module vp.chartFrame {
         buildAndShow(axis: vp.chartFrame.axisBase, show: boolean): void;
         build(transition?: vp.animation.transitionClass): void;
         layoutAxes(transition: vp.animation.transitionClass, left: number, top: number, right: number, bottom: number): void;
-        translate(x: number, y: number, isCrispAdjustment?: boolean): chartFrameEx;
+        translate(x: number, y: number, isCrispAdjustment?: boolean): this;
         onShade(): any;
         onShade(value: any): chartFrameEx;
         width(): number;
@@ -876,8 +876,8 @@ declare module vp.chartFrame {
         private _transition;
         constructor(container: HTMLElement, xData: axisDataClass, yData: axisDataClass, isCrisp?: boolean);
         buildInitialDrawingParams(): void;
-        hide(transition?: vp.animation.transitionClass): gridLinesClass;
-        show(transition?: vp.animation.transitionClass): gridLinesClass;
+        hide(transition?: vp.animation.transitionClass): this;
+        show(transition?: vp.animation.transitionClass): this;
         isVisible(): boolean;
         build(transition?: vp.animation.transitionClass): void;
         private horizontalGridLineShader(element, record, index, isNew, xOffset, isCrisp, da, dir?);
@@ -900,7 +900,7 @@ declare module vp.chartFrame {
         isCrisp(value: boolean): gridLinesClass;
         drawingParams(): IGridLineDrawingParams;
         drawingParams(value: IGridLineDrawingParams): gridLinesClass;
-        translate(x: number, y: number, isCrispAdjustment?: boolean): gridLinesClass;
+        translate(x: number, y: number, isCrispAdjustment?: boolean): this;
         transition(): vp.animation.transitionClass;
         transition(value: vp.animation.transitionClass): gridLinesClass;
         rootElem(): any;
@@ -1424,6 +1424,7 @@ declare module vp.data {
         aggName: string;
         constructor(name: string, column: string, aggName: string);
     }
+    function normalize(data: number[], toMin?: number, toMax?: number): any[];
 }
 declare module vp.unitTests {
     function testDataUtils(): void;
@@ -1441,16 +1442,16 @@ declare module vp.dom {
         };
         indexOf: (searchElement: any, fromIndex?: number) => number;
         constructor(elements?: any);
-        frameRateChanged(fpsCallBack: any): selectedSet;
+        frameRateChanged(fpsCallBack: any): this;
         add(content: any): singleWrapperClass;
-        clear(): selectedSet;
+        clear(): this;
         show(): boolean;
         show(showIt: boolean): selectedSet;
-        showToggle(): selectedSet;
+        showToggle(): this;
         hide(): boolean;
         hide(showIt: boolean): selectedSet;
-        collapse(): selectedSet;
-        expand(): selectedSet;
+        collapse(): this;
+        expand(): this;
         docOffset(elem: any): any;
         left(): number;
         left(value: number): selectedSet;
@@ -1466,18 +1467,18 @@ declare module vp.dom {
         totalWidth(): number;
         toolTipEnabled(): boolean;
         toolTipEnabled(value: boolean): selectedSet;
-        animate(duration?: number, ease?: any, container?: any): selectedSet;
-        onAnimationComplete(completedFunc: any): selectedSet;
-        remove(): selectedSet;
+        animate(duration?: number, ease?: any, container?: any): this;
+        onAnimationComplete(completedFunc: any): this;
+        remove(): this;
         attr(name: string): string;
         attr(name: string, value: string): selectedSet;
         attr(name: string, value: number): selectedSet;
         prop(name: any, value: any): any;
-        attrXlink(name: any, origValue: any): selectedSet;
-        attrNS(ns: any, name: any, value: any): selectedSet;
+        attrXlink(name: any, origValue: any): this;
+        attrNS(ns: any, name: any, value: any): this;
         hLine(x1: number, x2: number, y: number, makeCrisp: boolean): selectedSet;
         vLine(y1: number, y2: number, x: number, makeCrisp: boolean): selectedSet;
-        bounds(x: any, y: any, width: any, height: any, makeCrisp?: boolean): selectedSet;
+        bounds(x: any, y: any, width: any, height: any, makeCrisp?: boolean): this;
         radius(): number;
         radius(value: number): selectedSet;
         tabIndex(): string;
@@ -1486,31 +1487,31 @@ declare module vp.dom {
         opacity(value: number): selectedSet;
         checked(): number;
         checked(value: number): selectedSet;
-        position(x: any, y: any): selectedSet;
-        absPosition(left: any, top: any): selectedSet;
-        removeProp(name: any): selectedSet;
-        center(cx: any, cy: any): selectedSet;
+        position(x: any, y: any): this;
+        absPosition(left: any, top: any): this;
+        removeProp(name: any): this;
+        center(cx: any, cy: any): this;
         id(): string;
         id(value: string): selectedSet;
-        addClass(name: any): selectedSet;
-        removeClass(name: any): selectedSet;
+        addClass(name: any): this;
+        removeClass(name: any): this;
         hasClass(name: any): boolean;
         getBounds(relToParent: boolean): any;
-        setClass(name: any): selectedSet;
-        toggleClass(name: any): selectedSet;
-        attach(eventName: string, funcToCall: any, useCapture?: boolean): selectedSet;
-        detach(eventName: string, funcToCall: any, useCapture?: boolean): selectedSet;
+        setClass(name: any): this;
+        toggleClass(name: any): this;
+        attach(eventName: string, funcToCall: any, useCapture?: boolean): this;
+        detach(eventName: string, funcToCall: any, useCapture?: boolean): this;
         transform(): string;
         transform(value: string): selectedSet;
-        translate(x: number, y: number, makeCrispGroup?: boolean, makeCrispRoot?: boolean): selectedSet;
+        translate(x: number, y: number, makeCrispGroup?: boolean, makeCrispRoot?: boolean): this;
         transformOrigin(): string;
         transformOrigin(value: string): selectedSet;
         addStop(offset: any, color: string, opacity?: number): selectedSet;
         textBaseline(alignType: string, rc?: SVGRect): selectedSet;
-        from(x1: any, y1: any): selectedSet;
-        to(x2: any, y2: any): selectedSet;
-        font(family: any, size: any, weight: any, style: any): selectedSet;
-        dataPair(dataItem: any, dataIndex: any): selectedSet;
+        from(x1: any, y1: any): this;
+        to(x2: any, y2: any): this;
+        font(family: any, size: any, weight: any, style: any): this;
+        dataPair(dataItem: any, dataIndex: any): this;
         data(): any[];
         data(value: any[]): selectedSet;
         dataItem(): any;
@@ -1527,15 +1528,15 @@ declare module vp.dom {
         value(value: string): selectedSet;
         html(): string;
         html(value: string): selectedSet;
-        colors(fill: any, stroke: any, strokeWidth: any): selectedSet;
+        colors(fill: any, stroke: any, strokeWidth: any): this;
         href(): string;
         href(value: string): selectedSet;
-        safeHref(value: any, fallback: any): selectedSet;
+        safeHref(value: any, fallback: any): this;
         kids(): selectedSet;
         elementSizes(callBack: any): any;
         background(): string;
         background(value: string): selectedSet;
-        focus(): selectedSet;
+        focus(): this;
         dataId(): string;
         dataId(value: string): selectedSet;
         shapeId(): string;
@@ -1544,8 +1545,8 @@ declare module vp.dom {
         element(): any;
         wrap(index: any): any;
         toArray(): any[];
-        each(callback: any): selectedSet;
-        eachWrapped(callback: any): selectedSet;
+        each(callback: any): this;
+        eachWrapped(callback: any): this;
         merge(elemOrArray: any): selectedSet;
         private removeCore(content);
         append<T>(content: T): T;
@@ -1813,13 +1814,13 @@ declare module vp.canvas {
         constructor(parentElem: any, selector: any);
         merge(elemOrArray: any): canvasSelectedSet;
         multiAppend(str: any, count: any): any[];
-        updateBounds(w: any, h: any): dom.selectedSet;
-        initShaderAnimations(duration: any, onCompleteCallback: any): dom.selectedSet;
-        resetShaderAnimations(): dom.selectedSet;
+        updateBounds(w: any, h: any): this;
+        initShaderAnimations(duration: any, onCompleteCallback: any): this;
+        resetShaderAnimations(): this;
         pointSize(value: any): any;
         usePointSprites(value: any): any;
         usePointSize(value: any): any;
-        markRebuildNeeded(): dom.selectedSet;
+        markRebuildNeeded(): this;
         append(content: string): vp.dom.singleWrapperClass;
         append<T>(content: T): T;
         attr(name: string): string;
@@ -2115,8 +2116,8 @@ declare module vp.dom {
         _styleSheet: any;
         _elem: any;
         constructor(innerText?: string);
-        addRule(selector: any, style: any): styleSheetClass;
-        remove(): styleSheetClass;
+        addRule(selector: any, style: any): this;
+        remove(): this;
         sheet(): any;
         id(value: any): any;
     }
@@ -2132,7 +2133,15 @@ declare module vp.formatters {
     function date(value: any): number;
     function string(value: any): string;
     function format(value: any): any;
-    function truncateText(text: string, maxLength: number, addEllipses: boolean, fakeLabel: SVGTextElement, ellipsesWidth: number): string;
+    /**
+     *  return a subset of "text" that doesn't exceed "maxLength".
+     * @param text
+     * @param maxLength
+     * @param addEllipses
+     * @param fakeLabel can be SVGTextElement or HTMLElement
+     * @param ellipsesWidth
+     */
+    function truncateText(text: string, maxLength: number, addEllipses: boolean, fakeLabel: any, ellipsesWidth: number): string;
 }
 declare module vp.formatters {
     /** Formats a number as a date or time, according to the specified 'format' string.  Example
@@ -2142,6 +2151,7 @@ declare module vp.formatters {
     /** Formats a number according to the specified 'format' string (a simplified version of an Excel numeric
     formatting string).  Example formats:  0, #,##0.000, $#,##0.00 */
     function formatNumber(value: number, format: string): string;
+    function createNumFormatterFromRange(minValue: number, maxValue: number, steps?: number): (value: number) => any;
     function createDateFormatterFromRange(minDate: number, maxDate: number, steps?: number): any;
     function createExcelFormatter(formatString: string, colType: string): any;
 }
@@ -2324,7 +2334,7 @@ declare module vp.marks {
         _seriesIndex: number;
         _seriesCount: number;
         _containerType: containerType;
-        _onShaderCallback: (element: HTMLElement, record: any, index: number, isNew: boolean, context: any, transition: vp.animation.transitionClass) => any;
+        _onShaderCallback: (element: HTMLElement, record: any, index: number, isNew: boolean, context: any, transition: vp.animation.transitionClass, isLastNew: boolean) => any;
         _glBuilder: glBuilderClass;
         _jsParser: jsParserClass;
         _data: any;
@@ -2349,7 +2359,7 @@ declare module vp.marks {
         rootElem(): any;
         translate(x: any, y: any, makeCrispAdjustment?: boolean): T;
         onShade(): any;
-        onShade(callback: (element: any, record: any, index: number, isNew: boolean) => any): T;
+        onShade(callback: (element: any, record: any, index: number, isNew: boolean, context, transition, isLastNew: boolean) => any): T;
         keyFunc(): any;
         keyFunc(callback: (element: any, record: any, index: number, isNew: boolean) => any): T;
         drawingParams(): any;
@@ -2492,7 +2502,7 @@ declare module vp.marks {
         setTriangleVertices(data: any[]): number;
         setRect2dVertices(data: any[]): number;
         setLine2dVertices(data: any[]): number;
-        statsCallback(value: any): glBuilderClass;
+        statsCallback(value: any): this;
     }
 }
 declare module vp.marks {
@@ -2702,10 +2712,10 @@ declare module vp.layouts {
         };
         addForceWithDistance(from: vp.geom.IPoint, to: vp.geom.IPoint, charge: number, maxDistance: number, distOp: string, forceTotal: vp.geom.IPoint): void;
         computeQuadTreeNodeForce(node: IForceNode, qtNode: quadNodeMass, forceTotal: vp.geom.IPoint): void;
-        onStart(callback: any): forceLayoutClass;
-        onTick(callback: any): forceLayoutClass;
-        onEnd(callback: any): forceLayoutClass;
-        onStats(callback: any): forceLayoutClass;
+        onStart(callback: any): this;
+        onTick(callback: any): this;
+        onEnd(callback: any): this;
+        onStats(callback: any): this;
         nodes(): IForceNode[];
         nodes(value: IForceNode[]): forceLayoutClass;
         links(): IForceLink[];
@@ -2911,7 +2921,7 @@ declare module vp.plotBox {
         resetCamera(): void;
         getMatrix(): geom.matrix4;
         getScreenMatrix(): geom.matrix4;
-        rebuild(): transform3dClass;
+        rebuild(): this;
         transformPointEx(x: number, y: number, z: number): geom.vector3;
         adjustZoom(scaleFactor: number, x: number, y: number): void;
         private safeRange(max, min);

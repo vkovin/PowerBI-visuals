@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    dataTipMgr.ts - manages the data tips on the client.
 //-------------------------------------------------------------------------------------
 
@@ -10,37 +10,39 @@ module beachPartyApp
     export class DataTipMgrClass extends beachParty.DataChangerClass 
     {
         private chartHostHelper: bps.ChartHostHelperClass;
+        private dataTipMgr: DataTipMgrClass;
         private application: AppClass;
         private settings: AppSettingsMgr;
         private container: HTMLElement;
 
         _dataTips: DataTipClass[] = [];
 
-        constructor(hostHelper: bps.ChartHostHelperClass, application: AppClass, settings: AppSettingsMgr, container: HTMLElement)
+        constructor(hostHelper: bps.ChartHostHelperClass, dataTipMgr: DataTipMgrClass, application: AppClass, settings: AppSettingsMgr, container: HTMLElement)
         {
             super();
 
             this.chartHostHelper = hostHelper;
+            this.dataTipMgr = dataTipMgr;
             this.application = application;
             this.settings = settings;
             this.container = container;
         }
 
-        addDataTip(colName: string, pt?: any)
+        addDataTip(title: string, colNames: string[], includeNames: boolean, pt?: any)
         {
             var rootW = vp.select(this.container, ".dataTipsRoot");
 
-            var dataTip = new DataTipClass(this, this.application, this.settings, this.container, rootW[0], this.chartHostHelper);
+            var dataTip = new DataTipClass(this.dataTipMgr, this.application, this.settings, this.container, rootW[0], bps.ChartHostHelperClass.instance);
             this._dataTips.push(dataTip);
 
-            dataTip.setColumnName(colName);
+            dataTip.setParams(title, colNames, includeNames);
 
             dataTip.registerForChange("position", (e) =>
             {
                 var rc = dataTip.getPlotBounds();
                 var msg = "dataTip: " + vp.geom.rectToString(rc);
 
-                this.application.quickStats(msg);
+                /*appClass.instance*/this.application.quickStats(msg);
             });
 
             if (pt)

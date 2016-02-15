@@ -30,6 +30,8 @@ module beachPartyApp
         _loadedFileOpenText = null;
         _dataScrubberName = "None";
         _preload: bps.Preload;
+        _fileOpenObjs: any[];
+        _selectedOpenFile: string;
 
         private saveSettingsHandler: (settings: any, type: sandDance.SettingsType)  => void;
         private loadSettingsHandler: (type: sandDance.SettingsType) => any;
@@ -67,36 +69,75 @@ module beachPartyApp
             this.onDataChanged("preload");
         }
 
+        showMsg(title: string, msg: string)
+        {
+            /*appClass.instance*/this.application.showInfoMsg(title, msg);
+        }
+
+        selectedOpenFile(value?: string)
+        {
+            if (arguments.length == 0)
+            {
+                return this._selectedOpenFile;
+            }
+
+            this._selectedOpenFile = value;
+
+            if (value)
+            {
+                RelationMgrClass.instance.getFileText(value, (text, fn) => 
+                {
+                    this._loadedFileOpenText = text;
+                    this._selectedFileName = value;
+                    this.loadFileOpenLocal();
+                });
+            }
+
+            this.onDataChanged("selectedOpenFile");
+        }
+
         /** Show FILE OPEN panel. */
         openFileOpenPanel()
         {
-            var rc = vp.select(this.container, ".bbData").getBounds(false);
+            var rc = vp.select("#bbData").getBounds(false);
             var left = rc.left;
             var top = rc.bottom;
 
-            this._fileOpenPanel = buildJsonPanel(this.application, this.settings, this.container, "bbData", this, "fileOpen", true, left, top);
+            this._fileOpenPanel = buildJsonPanel(this.application, this.settings, this.container, "bbData", this, "fileOpenPanel", true, left, top);
 
             //---- make sure actions don't auto-close (except for "load" button) ----
-            this._fileOpenPanel._isPinnedDown = true;
+            this._fileOpenPanel._closeOnAction = false;
 
             var elem = this._fileOpenPanel.getRootElem();
 
             //---- hide SQL for the client edition ----
-            if (this.application._edition === "client")
+            if (/*appClass.instance*/this.application._edition == "client")
             {
-                vp.select(elem, ".tab3").css("display", "none");
+                vp.select(elem, "#tab4").css("display", "none");
+            }
+
+            //---- hide SWITCH tab if < 2 files are open ----
+            if (RelationMgrClass.instance.getFileCount() < 2)
+            {
+                //vp.select(elem, "#tab0").css("display", "none");
+                this._fileOpenPanel.showTab("tab0", false);
+
+                var newFirstTab = vp.select(elem, "#tab1")[0];
+                this._fileOpenPanel.onTabSelected(newFirstTab);
             }
 
             //---- adjust length of knownDataPickerList ----
             var panelHeight = vp.select(elem).height();
 
-            vp.select(elem, ".knownDataPickerList")
+            vp.select(elem, "#knownDataPickerList") 
                 .css("max-height", (panelHeight - 65) + "px");
 
         }
 
         uploadData(data: any, fn: string, wdParams?: bps.WorkingDataParams, callback?: any)
         {
+            this.showMsg("Loading data: " + fn, "Please wait...");
+
             if (!wdParams)
             {
                 var wdParams = new bps.WorkingDataParams(fn);
@@ -186,10 +227,13 @@ module beachPartyApp
         {
             if (this._fileOpenPanel)
             {
-                this._fileOpenPanel.close();
-                this._fileOpenPanel = null;
+                //---- don't close if panel is draggable (user must close explictly) ----
+                if (!this._fileOpenPanel.isShowingTitle())
+                {
+                    this._fileOpenPanel.close();
+                    this._fileOpenPanel = null;
+                }
             }
-
         }
 
         public updateDataView(data: any) {
@@ -278,7 +322,7 @@ module beachPartyApp
             //this._fileOpenUrl = "";
             this._fileOpenSource = null;
 
-            this.application.logAction(Gesture.click, e.target.id, ElementType.button, Action.open, Target.filePanel, false);
+            logAction(Gesture.click, e.target.id, ElementType.button, Action.open, Target.filePanel, false);
 
             // this.openFileOpenPanel();
         }
@@ -338,21 +382,53 @@ module beachPartyApp
 
         onOpenFileClicked()
         {
-            //---- user clicked on "Load File" button for local file open ----
-            LocalFileHelper.loadFile(".csv,.txt,.json", (text, fn) => 
-            {
-                try
-                {
-                    //---- NOTE: file is actually uploaded via "loadFileOpenLocal()", called from fileOpenPanel OK button handler ----
-                    this._loadedFileOpenText = text;
-                    this.selectedFileName(fn);
+            var fileExts = ".csv,.txt,.json";
 
-                    this.setLocalFileType(fn);
-                }
-                catch (ex)
+            if (true)       // appClass.instance.isNextEdition())
+            {
+                fileExts += ",.png,.jpg,.bmp";
+            }
+
+            this.selectedFileName(null);
+
+            //---- support for multiple files ----
+            LocalFileHelper.getFileOpenSelections(fileExts, (files) =>
+            {
+                this._fileOpenObjs = files;
+
+                var fileList = "";
+                for (var i = 0; i < files.length; i++)
                 {
-                    throw ("Error parsing session file: " + ex);
+                    var file = files[i];
+                    var fn = file.name;
+
+                    if (fileList != "")
+                    {
+                        fileList += " ";
+                    }
+
+                    fileList += fn;
                 }
+
+                this.selectedFileName(fileList);
+
+                //---- read first file ----
+                LocalFileHelper.loadFileFromFileObj(files[0], (text, fn, preload) =>
+                {
+                    try
+                    {
+                        //---- NOTE: file is actually uploaded via "loadFileOpenLocal()", called from fileOpenPanel OK button handler ----
+                        this._preload = preload;
+                        this._loadedFileOpenText = text;
+                        //this.selectedFileName(fn);
+
+                        this.setLocalFileType(fn);
+                    }
+                    catch (ex)
+                    {
+                        throw ("Error parsing session file: " + ex);
+                    }
+                });
             });
         }
 
@@ -366,8 +442,6 @@ module beachPartyApp
 
             if (url)
             {
-                url = url.trim();           // remove leading/tailing spaces
-
                 var fileType = this._openFileTypeWeb;
 
                 // var text = this._loadedFileOpenText;
@@ -410,6 +484,10 @@ module beachPartyApp
                 //---- supply a dataName so we can refer to this open data source when needed ----
                 wdParams.dataName = fn;
 
+                this._fileOpenObjs = null;
+
+                this.showMsg("Loading data: " + fn, "Please wait...");
+
                 this._bpsHelper.loadData(wdParams);
             }
 
@@ -427,28 +505,74 @@ module beachPartyApp
         }
 
         /** load the file from cache or as known file. */
-        autoloadFile(filename: string, preload?: bps.Preload, callback?: any)
+        autoloadFile(wdParams?: bps.WorkingDataParams, callback?: any)
         {
-            var entry = this.getDataFileFromCache(filename, "local");
-            if (!entry)
-            {
-                entry = this.getDataFileFromCache(filename, "web");
-            }
+            /// Note: the app client loads LOCAL files from cache and sends to engine, but
+            /// WEB ("url") files should be loaded directly by the engine (to save large file memeory usage and
+            /// transfer time.
 
-            if (entry)
+            wdParams.canLoadFromCache = true;
+            var filename = wdParams.dataName;
+
+            if (wdParams.fileSource == "known" || wdParams.fileSource == null)
             {
-                this.uploadData(entry.data, filename, entry.wdParams, callback);
+                this.openKnownFile(filename, false, callback);
+            }
+            else if (wdParams.fileSource == "url")
+            {
+                this._bpsHelper.loadData(wdParams, callback);
             }
             else
             {
-                if (!this.application.isKnownFile(filename))
-                {
-                    //filename = "Titanic";       // default known file name
-                    throw "Cannot open file: " + filename;
-                }
-
-                this.openKnownFile(filename, false, callback);
+                var text = this.getLocalFileFromCache(wdParams);
+                this.uploadData(text, filename, wdParams, callback);
             }
+        }
+
+        getLocalFileFromCache(wdParams: bps.WorkingDataParams)
+        {
+            //---- autoload LOCAL file ----
+            var filename = wdParams.dataName;
+
+            var isCached = beachParty.LocalStorageMgr.isPresent(
+                beachParty.StorageType.dataFile, beachParty.StorageSubType.local, filename);
+
+            if (!isCached)
+            {
+                throw "Cannot autoload local file from cache: " + filename;
+            }
+
+            var strEntry = beachParty.LocalStorageMgr.get(beachParty.StorageType.dataFile, beachParty.StorageSubType.local, filename);
+            var entry = JSON.parse(strEntry);
+
+            var text = entry.data;
+
+            this.showMsg("Loading data: " + filename, "Please wait...");
+
+            //this.uploadData(text, filename, wdParams, callback);
+            return text;
+        }
+
+        getWdParams(url: string, fileType: string, scrubberTemplate?: string)
+        {
+            var wdParams = null;
+            var fn = AppUtils.getLastNodeOfUrl(url);
+
+            if (scrubberTemplate)
+            {
+                wdParams = <bps.WorkingDataParams>this.getPreloadFromLocalStorage(scrubberTemplate);        // fn, "local");
+            }
+
+            if (!wdParams)
+            {
+                wdParams = new bps.WorkingDataParams(fn, url);
+                wdParams.hasHeader = this._fileHasHeader;
+                wdParams.separator = (fileType == "tab") ? "\t" : ",";
+                wdParams.fileType = (fileType == "json") ? bps.FileType.json : bps.FileType.delimited;
+                wdParams.fileSource = "local";
+            }
+
+            return wdParams;
         }
 
         /** local a local file using our properties (include this._loadedFileOpenText). */
@@ -457,30 +581,28 @@ module beachPartyApp
             var url = this._selectedFileName;
             if (url)
             {
+                var parts = url.split(" ");         // get first file
+                url = parts[0].trim();              // remove leading/tailing spaces
+
+                var isLocal = true;
                 var fileType = this._openFileTypeLocal;
                 var fn = AppUtils.getLastNodeOfUrl(url);
 
-                var scrubberTemplate = this._dataScrubberName;
-                if (scrubberTemplate)
-                {
-                    var wdParams = <bps.WorkingDataParams>this.getPreloadFromLocalStorage(scrubberTemplate);        // fn, "local");
-                }
+                var wdParams = this.getWdParams(url, this._openFileTypeLocal, this._dataScrubberName);
 
-                if (!wdParams)
-                {
-                    wdParams = new bps.WorkingDataParams(fn, url);
-                    wdParams.hasHeader = this._fileHasHeader;
-                    wdParams.separator = (fileType === "tab") ? "\t" : ",";
-                    wdParams.fileType = (fileType === "json") ? bps.FileType.json : bps.FileType.delimited;
-                    wdParams.fileSource = "local";
-                }
+                //---- TODO: present user with a dialog for each file opened and allow him to set the wdParams for each ----
+                RelationMgrClass.instance.setFileObjs(this._fileOpenObjs, wdParams);
 
                 var text = this._loadedFileOpenText;
                 this.uploadData(text, fn, wdParams);
 
-                if (this.settings._cacheLocalFiles)
+                if (settings.cacheLocalFiles())
                 {
-                    this.storeDataFileToCache(url, "local", text, wdParams);
+                    var obj = { data: text, wdParams: wdParams };
+                    var value = JSON.stringify(obj);
+
+                    beachParty.LocalStorageMgr.save(beachParty.StorageType.dataFile,
+                        beachParty.StorageSubType.local, url, value);
                 }
             }
 
@@ -489,110 +611,26 @@ module beachPartyApp
 
         getPreloadFromLocalStorage(fn: string, fileSource?: string, tableName?: string)
         {
+            // var preload = <bps.Preload>null;
+
             var preload = <bps.Preload>this.loadSettingsHandler(sandDance.SettingsType.preloads);
 
-//             if (localStorage)
-//             {
-//                 var key = this.makePreloadKey(fn, fileSource, tableName);
-//                 vp.utils.debug("getPreloadFromLocalStorage: key=" + key);
+//             var subtype = beachParty.StorageSubType[fileSource];
 // 
-//                 var str = localStorage[key];
-//                 if (str && str.length)
-//                 {
-//                     preload = JSON.parse(str);
-//                 }
+//             var str = beachParty.LocalStorageMgr.get(beachParty.StorageType.preload,
+//                 subtype, fn, tableName); 
+// 
+//             if (str && str.length)
+//             {
+//                 preload = JSON.parse(str);
 //             }
 
             return preload;
         }
 
-        /** get list of data scrubber templates from local storage. locType is one of 
-         * "sql", "web", "local". */
-        getPreloadNamesFromLocalStorage(locType?: string)
+        __savePreloadToLocalStorage(preload: bps.Preload)
         {
-            var list = [this.loadSettingsHandler(sandDance.SettingsType.preloads)];
-
-//             if (localStorage)
-//             {
-//                 var keyStart = "preloads-$";
-// 
-//                 if (locType)
-//                 {
-//                     keyStart += locType + "\\";
-//                 }
-// 
-//                 //---- enumerate all keys to find those that match our needs ----
-//                 for (var i = 0; i < localStorage.length; i++)
-//                 {
-//                     var key = localStorage.key(i);
-//                     if (key.startsWith(keyStart))
-//                     {
-//                         var fn = key.substr(keyStart.length);
-//                         list.push(fn);
-//                     }
-//                 }
-//             }
-
-            return list;
-        }
-
-        makePreloadKey(fn: string, fileSource?: string, tableName?: string)
-        {
-            // if (fileSource)
-            // {
-            //     var key = "preloads-$" + fileSource + "\\" + fn;
-            // }
-            // else
-            // {
-            //     var key = "preloads-$" + fn;
-            // }
-
-            var key = "preloads";
-
-            // if (fileSource === "sql")
-            // {
-            //     //---- fn is connection string, tableName is table name or query string ----
-            //     key += "\\" + tableName;
-            // }
-
-            return key;
-        }
-
-        makeCacheKey(fn: string, fileSource?: string, tableName?: string)
-        {
-            if (fileSource)
-            {
-                var key = "fileCache-$" + fileSource + "\\" + fn;
-            }
-            else
-            {
-                var key = "fileCache-$" + fn;
-            }
-
-            if (fileSource === "sql")
-            {
-                //---- fn is connection string, tableName is table name or query string ----
-                key += "\\" + tableName;
-            }
-
-            return key;
-        }
-
-        savePreloadToLocalStorage(preload: bps.Preload)
-        {
-            // if (localStorage)
-            // {
-                //var str = JSON.stringify(preload);
-                
-                this.saveSettingsHandler(preload, sandDance.SettingsType.preloads);
-//                 var fileSource = preload.fileSource;
-//                 var fn = (fileSource === "url") ? preload.filePath : preload.dataName;
-// 
-//                 var key = this.makePreloadKey(fn, fileSource, preload.tableName);
-                // vp.utils.debug("savePreloadToLocalStorage: key=" + key);
-
-                // localStorage[key] = str;
-            // }
+            this.saveSettingsHandler(preload, sandDance.SettingsType.preloads);
         }
 
         reloadDataPerScrubbing(editInfos: EditColInfo[])
@@ -615,7 +653,15 @@ module beachPartyApp
 
             var preload = this._preload;
             preload.fieldList = fieldList;
-            this.savePreloadToLocalStorage(preload);
+
+//             var strValue = JSON.stringify(preload);
+// 
+//             beachParty.LocalStorageMgr.save(beachParty.StorageType.preload,
+//                 beachParty.StorageSubType.local, preload.filePath, strValue);
+// 
+//             this.showMsg("Reloadng data: " + preload.filePath, "Please wait...");
+
+            this.__savePreloadToLocalStorage(preload);
 
             //---- reload data with new fieldList ----
             // if (this._loadedFileOpenText)
@@ -642,6 +688,8 @@ module beachPartyApp
             //---- clear local file data from last load ----
             this._loadedFileOpenText = null;
 
+            this.showMsg("Loading data: " + name, "Please wait...");
+
             var preload = this.getPreloadFromLocalStorage(name, "known");
             if (preload)
             {
@@ -649,8 +697,8 @@ module beachPartyApp
                 {
                     if (fromUI)
                     {
-                       this.application.logAction(Gesture.select, null, ElementType.picklist, Action.load, Target.data,
-                            true, "fileName", name, "isKnown", "true");
+                       logAction(Gesture.select, null, ElementType.picklist, Action.load, Target.data,
+                            true, "fileName", name, "source", "known");
                     }
 
                     if (callback)
@@ -666,8 +714,8 @@ module beachPartyApp
                 {
                     if (fromUI)
                     {
-                        this.application.logAction(Gesture.select, null, ElementType.picklist, Action.load, Target.data,
-                            true, "fileName", name, "isKnown", "true");
+                        logAction(Gesture.select, null, ElementType.picklist, Action.load, Target.data,
+                            true, "fileName", name, "source", "known");
                     }
 
                     if (callback)
@@ -677,42 +725,6 @@ module beachPartyApp
 
                 });
             }
-        }
-
-        storeDataFileToCache(filename: string, fileSource: string, data: string, wdParams: bps.WorkingDataParams)
-        {
-            console.log("storeDataFileToCache: " + filename);
-//             if (localStorage)
-//             {
-//                 var key = this.makeCacheKey(filename, fileSource);
-// 
-//                 var entry = new CacheEntry();
-//                 entry.data = data;
-//                 entry.wdParams = wdParams;
-//                 
-//                 var strEntry = JSON.stringify(entry);
-//                 localStorage[key] = strEntry;
-//             }
-        }
-
-        getDataFileFromCache(filename: string, fileSource: string)
-        {
-            var entry = <CacheEntry> null;
-
-            console.log("getDataFileFromCache: " + filename);
-
-//             if (localStorage)
-//             {
-//                 var key = this.makeCacheKey(filename, fileSource);
-//                 var strEntry = localStorage[key];
-// 
-//                 if (strEntry)
-//                 {
-//                     entry = <CacheEntry>JSON.parse(strEntry);
-//                 }
-//             }
-
-            return entry;
         }
 
         dataScrubberName(value?: string)
@@ -736,12 +748,5 @@ module beachPartyApp
             this._loadedFileOpenText = value;
             this.onDataChanged("loadedFileOpenText");
         }
-
-    }
-
-    export class CacheEntry
-    {
-        data: string;
-        wdParams: bps.WorkingDataParams;
     }
 }

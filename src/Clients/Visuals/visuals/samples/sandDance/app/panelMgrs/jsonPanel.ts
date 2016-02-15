@@ -11,6 +11,8 @@ module beachPartyApp
 
     export class JsonPanelClass extends BasePanelClass
     {
+        static nextPickerButtonId = 1;
+
         _groupDataName: string;         // for groups of radio buttons
         _lastRowW = null;
         _controlsById: any = {};
@@ -20,35 +22,53 @@ module beachPartyApp
         _controls = [];
         _lastTdW = null;
         _acceptDataName = null;         // data name from the ACCEPT BUTTON
+        _firstRowOfContent: boolean;
+        _adjustSize = null;
 
         //---- tab stuff ----
         _currentTabContentElem: HTMLElement;
         _currentTabButtonElem: HTMLElement;
 
         constructor(application: AppClass, settings: AppSettingsMgr, container: HTMLElement, openerIds: string, dataOwner: beachParty.DataChangerClass, name: string, json: any, bgColor?: string,
-            isCol1Indent = true, hideClose = false, addAutoClose = false, addNormalClose?: boolean)
+            isCol1Indent = true)
         {
-            super(application, settings, container, name, json.isDialog, bgColor, json.title, json.width, json.height, json.resizable, json.tip, hideClose, addAutoClose,
-                addNormalClose);
+            super(application, settings, container, name, json.isDialog, bgColor, json.title, json.width, json.height, json.resizable, json.tip, json.hideClose,
+                json.autoClose, json.OpacityDisabled);
+
+            if (json.hideTitle)
+            {
+                this.showTitle(false);
+            }
 
             this._dataOwner = dataOwner;
             this._isCol1Indent = isCol1Indent;
             this._openerIds = openerIds;
+            this._adjustSize = json.adjustSize;
 
             this._rowSpacing = json.rowSpacing;
             this._isDialog = json.isDialog;
 
-            var rootW = vp.select(this._root);
-
             if (json.minHeight)
             {
-                rootW.css("min-height", json.minHeight + "px");
+                vp.select(this._root)
+                    .css("min-height", json.minHeight + "px")
             }
 
             if (json.minWidth)
             {
-                rootW.css("min-width", json.minWidth + "px");
+                vp.select(this._root)
+                    .css("min-width", json.minWidth + "px")
             }
+
+            if (json.maxWidth)
+            {
+                vp.select(this._root)
+                    .css("max-width", json.maxWidth + "px")
+            }
+
+            var rootW = vp.select(this._contentRow);
+
+            rootW.css("margin-botom", "-15px");     // remove some of space between title bar and first content
 
             //---- create CONTENT ----
             if (json.tabs)
@@ -61,24 +81,77 @@ module beachPartyApp
                 this.createTabContent(rootW, null, json.rows);
             }
 
+            if (json.adjustSize)
+            {
+                setTimeout((e) =>
+                {
+                    this.resizePanelToFitContent();
+                }, 10);
+            }
+
+            this.onPinnedDownChanged();         // update listbox classes to match gray/black background
+
+            if (json.isPinned !== undefined)
+            {
+                this.isPinnedDown(json.isPinned);
+            }
+
             this.setFocusToFirstControl();
+        }
+
+        resizePanelToFitContent()
+        {
+            this._resizeTarget = (this._primaryControl) ? this._primaryControl.getRootElem() : this._root;
+
+            this.removeMaxSizesFromResizeTarget();
+
+            var rc = vp.dom.getBounds(this._resizeTarget);
+            var width = this._adjustSize.width + rc.width;
+            var height = this._adjustSize.height + rc.height;
+
+            this.changePanelSize(width, height);
+        }
+
+        showTab(tabName: string, show: boolean)
+        {
+            if (RelationMgrClass.instance.getFileCount() < 2)
+            {
+                vp.select(this._root, "#" + tabName).css("display", (show) ? "" : "none");
+            }
         }
 
         setFocusToFirstControl()
         {
             var lowElem = null;
+            var lowIndex = null;
 
             for (var i = 0; i < this._controls.length; i++)
             {
                 var control = this._controls[i];
 
-                lowElem = control;
-                break;
+                var strIndex = control.getAttribute("tabIndex");
+                if (strIndex && strIndex != "")
+                {
+                    var index = +strIndex;
+
+                    //vp.utils.debug("setFocusToFirstControl: found control=" + control + ", tagName=" + control.tagName + ", id=" + 
+                    //    control.id + ", text=" + control.textContent + ", with tabIndex= " + index);
+
+                    if (lowIndex == null || index <= lowIndex)
+                    {
+                        lowIndex = index;
+                        lowElem = control;
+                    }          
+                }
+
             }
 
             if (lowElem)
             {
-                lowElem.focus();
+                //vp.utils.debug("setFocusToFirstControl: USING control=" + lowElem + ", tagName=" + lowElem.tagName + ", id=" +
+                //    lowElem.id + ", text=" + lowElem.textContent + ", with tabIndex= " + lowElem.tabIndex);
+
+                setTimeout((e) => lowElem.focus(), 50);    // delay 100 ms as needed
             }
         }
 
@@ -87,37 +160,37 @@ module beachPartyApp
             var firstTabButton = null;
 
             //---- create container for tab buttons ----
-            var tabButtonContainerW = parentW.append("div");
+            var tabButtonContainerW = parentW.append("div")
 
             tabButtonContainerW
-                .addClass("tabButtonContainer");
+                .addClass("tabButtonContainer")
 
             for (var i = 0; i < tabs.length; i++)
             {
                 var tab = tabs[i];
 
                 //---- add tab button ----
-                var id = "tab" + i;
+                var id = (tab.id) ? tab.id : ("tab" + i);
 
                 var tabButtonW = tabButtonContainerW.append("span")
                     .addClass("tabButton")
                     .addClass(id)
                     .attr("tabId", id)
+                    // .id(id)
                     .text(tab.tabName)
-                    .title(tab.tip);
-
-                tabButtonW
+                    .title(tab.tip)
                     .attach("click", (e) =>
                     {
                         this.onTabSelected(e.target);
-                    });
+                    })
 
                 //---- add tab content ----
                 var contentId = id + "Content";
 
-                this.createTabContent(parentW, contentId, tab.rows);
+                var tabContentW = this.createTabContent(parentW, contentId, tab.rows)
+                    .css("margin-top", "10px")
 
-                if (i === 0)
+                if (i == 0)
                 {
                     firstTabButton = tabButtonW[0];
                 }
@@ -146,14 +219,14 @@ module beachPartyApp
             var buttonId = $(tabButton).attr("tabId");
             var contentId = buttonId + "Content";
 
-            var tabContentW = vp.select(this.container, "." + contentId);
+            var tabContentW = vp.select(this._root, "." + contentId);
 
             if (tabContentW.length)
             {
                 tabContentW
                     .css("display", "");         // makes it default to visible;
 
-                var tabButtonW = vp.select(this.container, "." + buttonId)
+                var tabButtonW = vp.select(this._root, "." + buttonId)
                     .addClass("tabButtonOpen");
 
                 this._currentTabContentElem = tabContentW[0];
@@ -251,6 +324,8 @@ module beachPartyApp
 
             for (var i = 0; i < rows.length; i++)
             {
+                this._firstRowOfContent = (i === 0);
+
                 var row = rows[i];
                 tableW = this.buildRow(parentW, tableW, row);
             }
@@ -398,12 +473,42 @@ module beachPartyApp
                 tdW
                     .attr("colSpan", "99");
             }
-            else if (row.prompt)
+            else if (row.prompt !== undefined)
             {
                 //---- create PROMPT ----
-                this.createLabel(tdW, row.prompt, row.tip, row.isHtml);
+                var promptW = this.createLabel(tdW, row.prompt, row, row.tip, row.isHtml);
+
+                if (row.colSpan != undefined)
+                {
+                    tdW.attr("colspan", row.colSpan)
+                }
+
+                if (row.maxWidth !== undefined)
+                {
+                    tdW.css("max-width", row.maxWidth + "px");
+                }
+
+                if (row.rightMargin !== undefined)
+                {
+                    promptW.css("margin-right", row.rightMargin + "px");
+                }
+
+                if (row.topMargin !== undefined)
+                {
+                    promptW.css("margin-top", row.topMargin + "px");
+                }
+
+                if (row.height !== undefined)
+                {
+                    rowW.css("height", row.height + "px");
+                }
 
                 this._groupDataName = row.dataName;
+            }
+            else if (row.progress)
+            {
+                //---- create PROGRESS BAR ----
+                this.createProgress(tdW, row.progress, row, row.tip);
             }
             else if (row.image !== undefined)
             {
@@ -417,6 +522,10 @@ module beachPartyApp
             {
                 this.createText(row.text, rowW, tdW, row);
                 this._groupDataName = row.dataName;
+            }
+            else if (row.display !== undefined)
+            {
+                this.createDisplay(row.display, rowW, tdW, row);
             }
             else if (row.textArea !== undefined)
             {
@@ -435,27 +544,45 @@ module beachPartyApp
             {
                 this.createNumAdjuster(row.numAdjuster, rowW, tdW, row);
             }
+            else if (row.tourPicker !== undefined)
+            {
+                this.createPicker(row.tourPicker, rowW, tdW, row, (dataName, ddText, chevronW, e) =>
+                {
+                    this.showTourPicker(row.dataName, ddText, chevronW, e);
+                });
+            }
+            else if (row.scriptPicker !== undefined)
+            {
+                this.createPicker(row.scriptPicker, rowW, tdW, row, (dataName, ddText, chevronW, e) =>
+                {
+                    this.showScriptPicker(row.dataName, ddText, chevronW, e);
+                });
+            }
             else if (row.colPicker !== undefined)
             {
                 this.createPicker(row.colPicker, rowW, tdW, row, (dataName, ddText, chevronW, e) =>
                 {
-                    this.showColPicker(row.dataName, ddText, chevronW, e);
+                    this.showColumnPicker(row.dataName, ddText, chevronW, e);
                 });
             }
             else if (row.colPickerList !== undefined)
             {
-                this.createColPickerList(row.colPickerList, rowW, tdW, row);
+                this.createColumnPickerList(row.colPickerList, rowW, tdW, row);
             }
             else if (row.colorPicker !== undefined)
             {
                 this.createPicker(row.colorPicker, rowW, tdW, row, (dataName, ddText, chevronW, e) =>
                 {
-                    this.showColorPicker(row.includeTransparent, dataName, ddText, chevronW, e);
+                    this.showColorPicker(row.includeTransparent, dataName, ddText, chevronW, e, row);
                 });
             }
             else if (row.knownDataPickerList !== undefined)
             {
                 this.createKnownDataPickerList(row.knownDataPickerList, rowW, tdW, row);
+            }
+            else if (row.openDataPickerList !== undefined)
+            {
+                this.createOpenDataPickerList(row.openDataPickerList, rowW, tdW, row);
             }
             else if (row.knownDataPicker !== undefined)
             {
@@ -468,21 +595,21 @@ module beachPartyApp
             {
                 this.createPicker(row.enumPicker, rowW, tdW, row, (dataName, ddText, chevronW, e) =>
                 {
-                    this.showEnumPicker(dataName, ddText, chevronW, row.enumType, e);
+                    this.showEnumPicker(dataName, ddText, chevronW, row.enumType, e, row);
                 });
             }
             else if (row.scrubberPicker !== undefined)
             {
                 this.createPicker(row.enumPicker, rowW, tdW, row, (dataName, ddText, chevronW, e) =>
                 {
-                    this.showScrubberPicker(dataName, ddText, chevronW, row.enumType, e);
+                    this.showScrubberPicker(dataName, ddText, chevronW, row.enumType, e, row);
                 });
             }
             else if (row.shapePicker !== undefined)
             {
                 this.createPicker(row.shapePicker, rowW, tdW, row, (dataName, ddText, chevronW, e) =>
                 {
-                    this.showShapePicker(dataName, ddText, chevronW, e);
+                    this.showShapePicker(dataName, ddText, chevronW, e, row);
                 });
             }
             else if (row.customList !== undefined)
@@ -522,6 +649,8 @@ module beachPartyApp
                     var value = this.getValue(dataName);
                     control[dataName](value);
                 });
+
+                this.applyCommonProperties(vp.select(rootElem), tdW, row, false);
             }
 
             if (row.id)
@@ -544,7 +673,7 @@ module beachPartyApp
         {
             //var value = this.getValue(row.dataName);
 
-            this.createLabel(tdW, prompt, row.tip);
+            this.createLabel(tdW, prompt, row, row.tip);
 
             if (row.showValue)
             {
@@ -637,11 +766,24 @@ module beachPartyApp
         createButton(prompt: string, tdW: vp.dom.IWrapperOuter, row: any)
         {
             //---- create BUTTON ----
-            var buttonW = tdW.append("span")
-                .addClass("panelButton")
-                .text(row.button)
-                .title(row.tip)
-                .attr("tabIndex", "0");
+            if (row.img != undefined)
+            {
+                //---- an IMAGE-based button ----
+                var buttonW = tdW.append("img")
+                    .addClass("clickIcon")
+                    .attr("src", row.img)
+                    .title(row.tip)
+                    .attr("tabIndex", "100")
+            }
+            else
+            {
+                //---- a TEXT-based button ----
+                var buttonW = tdW.append("span")
+                    .addClass("panelButton")
+                    .text(row.button)
+                    .title(row.tip)
+                    .attr("tabIndex", "100")
+            }
 
             //---- store on-click properties on each instance ----
             buttonW[0].dataName = row.dataName;
@@ -653,25 +795,47 @@ module beachPartyApp
                 this._acceptDataName = row.dataName;
             }
 
-            if (row.leftMargin !== undefined)
+            if (row.textAlign != undefined)
             {
-                buttonW.css("margin-left", row.leftMargin + "px");
+                tdW
+                    .css("text-align", row.textAlign)
             }
+
+            if (row.leftMargin != undefined)
+            {
+                buttonW.css("margin-left", row.leftMargin + "px")
+            }
+
+            if (row.topMargin != undefined)
+            {
+                buttonW.css("margin-top", row.topMargin + "px")
+            }
+
+            if(row.bottomMargin != undefined)
+            {
+                buttonW.css("margin-bottom", row.bottomMargin + "px")
+            }
+
+            if (row.colSpan != undefined)
+            {
+                tdW.attr("colSpan", row.colSpan)
+            }
+
 
             buttonW.attach("click", (e) =>
             {
                 this.onClickButton(e);
 
-                this.onUserAction();
-            });
+                this.onUserAction(row);
+            })
 
             buttonW.attach("keydown", (e) =>
             {
-                if (e.keyCode === vp.events.keyCodes.enter)
+                if (e.keyCode == vp.events.keyCodes.enter)
                 {
                     this.onClickButton(e);
                 }
-            });
+            })
 
             this.applyCommonProperties(buttonW, tdW, row);
         }
@@ -679,24 +843,57 @@ module beachPartyApp
         createImage(src: string, tdW: vp.dom.IWrapperOuter, row: any)
         {
             //---- create IMG ----
-            var imgW = tdW.append("div")
+            var imgW = tdW.append("img")
                 .addClass("panelImage")
-                .text(src)
-                // .attr("src", src)
-                .title(row.tip);
+                .attr("src", src)
+                .title(row.tip)
 
             this.applyCommonProperties(imgW, tdW, row);
         }
 
-        onEnterKey()
+        createProgress(tdW: vp.dom.IWrapperOuter, prompt: string, row: any, tip: string)
         {
-            //---- simulate a button press on the ACCEPT BUTTON ----
-            if (this._acceptDataName)
+            var pgName = "progress" + nextId++;
+
+            this.createLabel(tdW, prompt, row, row.tip);
+
+            if (row.colSpan)
             {
-                this.callMethod(this._acceptDataName);
+                tdW.attr("colSpan", row.colSpan+"")
             }
 
-            super.onEnterKey();
+            //---- create PROGRESS BAR ----
+            //---- don't use HTML 5 since it uses animation, which we do NOT want ----
+
+            //var progressW = tdW.append("progress")
+            //    .attr("value", row.value)
+            //    .attr("max", row.max)
+
+            var progressW = tdW.append("div")
+                .addClass("myProgressBar");
+
+            var innerW = progressW.append("div")
+                .addClass("myInnerProgressBar")
+                .css("width", "0%")
+
+            this.applyCommonProperties(progressW, tdW, row);
+        }
+
+        onEnterKey(isFromKeyboard = true)
+        {
+            var focusElem = document.activeElement;
+
+            //---- ignore ENTER key in TEXTAREA ----
+            if (focusElem.tagName != "TEXTAREA" || ! isFromKeyboard)
+            {
+                //---- simulate a button press on the ACCEPT BUTTON ----
+                if (this._acceptDataName)
+                {
+                    this.callMethod(this._acceptDataName);
+                }
+
+                super.onEnterKey();
+            }
         }
 
         onClickButton(e)
@@ -705,7 +902,7 @@ module beachPartyApp
 
             if (elem.acceptButton)
             {
-                this.onEnterKey();
+                this.onEnterKey(false);
             }
             else
             {
@@ -739,19 +936,19 @@ module beachPartyApp
                 elemW.attr("readonly", "true");
             }
 
+            if (row.tabIndex !== undefined)
+            {
+                elemW[0].tabIndex = row.tabIndex;
+            }
+
             if (row.width)
             {
-                elemW.css("width", row.width);
+                elemW.css("width", row.width)
             }
 
             if (row.height)
             {
-                elemW.css("height", row.height);
-            }
-
-            if (row.tabIndex)
-            {
-                elemW.attr("tabIndex", row.tabIndex);
+                elemW.css("height", row.height)
             }
 
             if (row.marginLeft)
@@ -774,6 +971,11 @@ module beachPartyApp
                 elemW.css("margin-bottom", row.marginBottom);
             }
 
+            if (row.id)
+            {
+                elemW.attr("id", row.id)
+            }
+
             if (vp.utils.isString(row.disabled))
             {
                 var thisObj = this.getDataOwner(row.disabled);
@@ -782,7 +984,7 @@ module beachPartyApp
                     var value = this.getValue(row.disabled);
 
                     //---- not sure if this is form control, so disable using both methods ----
-                    elemW.attr("data-disabled", value);
+                    elemW.attr("data-disabled", value)
 
                     if (value)
                     {
@@ -805,12 +1007,15 @@ module beachPartyApp
                 value = value.capitalize();
             }
 
-            if (prompt && prompt !== "")
+            if (prompt && prompt != "")
             {
-                this.createLabel(tdW, prompt, row.tip);
+                this.createLabel(tdW, prompt, row, row.tip);
 
-                //---- add in next column ----
-                tdW = rowW.append("td");
+                if (!row.sameCol)
+                {
+                    //---- add in next column ----
+                    tdW = rowW.append("td");
+                }
             }
 
             //---- create TEXT ----
@@ -819,20 +1024,39 @@ module beachPartyApp
                 .attr("type", "text")
                 .value(value)
                 .title(row.tip)
+                .css("margin-top", "-7px")
                 .attach("focus", (e) =>
                 {
-                    //---- select all text on focus ----
-                    e.target.select();
+                    if (! row.noSelectOnFocus)
+                    {
+                        //---- select all text on focus ----
+                        e.target.select();
+                    }
                 })
                 .attach("blur", (e) =>
                 {
                     var newValue = vp.dom.value(e.target);
                     this.callMethod(row.dataName, newValue);
-                });
+                })
 
-            if (row.leftMargin !== undefined)
+            if (row.leftMargin != undefined)
             {
-                textW.css("margin-left", row.leftMargin + "px");
+                textW.css("margin-left", row.leftMargin + "px")
+            }
+
+            if (row.placeHolder != undefined)
+            {
+                textW.attr("placeHolder", row.placeHolder)
+            }
+
+            if (row.colSpan)
+            {
+                tdW.attr("colSpan", row.colSpan);
+            }
+
+            if (row.readonly)
+            {
+                textW.attr("readonly", "");
             }
 
             this.applyCommonProperties(textW, tdW, row);
@@ -852,25 +1076,85 @@ module beachPartyApp
 
         }
 
-        createLabel(tdW: vp.dom.IWrapperOuter, prompt: string, tip: string, isHtml?: boolean)
+        /** create a div that displays readonly text. */
+        createDisplay(prompt: string, rowW: vp.dom.IWrapperOuter, tdW: vp.dom.IWrapperOuter, row: any)
+        {
+            var value = <string>this.getValue(row.dataName);
+
+            if (value && row.capitalize)
+            {
+                value = value.capitalize();
+            }
+
+            if (prompt && prompt != "")
+            {
+                this.createLabel(tdW, prompt, row, row.tip);
+
+                if (!row.sameCol)
+                {
+                    //---- add in next column ----
+                    tdW = rowW.append("td");
+                }
+            }
+
+            //---- create DISPLAY ----
+            var textW = tdW.append("div")
+                .addClass("panelDisplay")
+                .text(value)
+                .title(row.tip)
+
+            if (row.leftMargin != undefined)
+            {
+                textW.css("margin-left", row.leftMargin + "px")
+            }
+
+            this.applyCommonProperties(textW, tdW, row);
+
+            var thisObj = this.getDataOwner(row.dataName);
+            thisObj.registerForRemovableChange(row.dataName, this, (e) =>
+            {
+                value = <string>this.getValue(row.dataName);
+
+                if (value && row.capitalize)
+                {
+                    value = value.capitalize();
+                }
+
+                textW.text(value);
+            });
+
+        }
+
+        createLabel(tdW: vp.dom.IWrapperOuter, prompt: string, row: any,tip: string, isHtml?: boolean)
         {
             //---- create label ----
             var spanW = tdW.append("span")
                 .addClass("panelPrompt")
-                .title(tip);
+                .title(tip)
+
+            if (row.topMargin)
+            {
+                spanW
+                    .css("display", "inline-block")
+
+            }
 
             if (isHtml)
             {
-                spanW.html(prompt);
+                spanW.html(prompt)
             }
             else
             {
-                spanW.text(prompt);
+                spanW.text(prompt)
             }
 
             //---- make this cell top-aligned ----
             tdW
-                .css("vertical-align", "top");
+                .css("vertical-align", "top")
+
+            this.applyCommonProperties(spanW, tdW, row);
+
+            return spanW;
         }
 
         createTextArea(prompt: string, rowW: vp.dom.IWrapperOuter, tdW: vp.dom.IWrapperOuter, row: any)
@@ -879,8 +1163,7 @@ module beachPartyApp
 
             if (prompt)
             {
-                this.createLabel(tdW, prompt, row.tip);
-                tdW = rowW.append("td");
+                this.createLabel(tdW, prompt, row, row.tip);
             }
 
             //---- add in next column ----
@@ -891,7 +1174,6 @@ module beachPartyApp
                 .addClass("panelTextArea")
                 .value(value)
                 .title(row.tip)
-                .attr("placeholder", row.placeholder)
                 .attach("focus", (e) =>
                 {
                     //---- select all text on focus ----
@@ -901,7 +1183,17 @@ module beachPartyApp
                 {
                     var newValue = vp.dom.value(e.target);
                     this.callMethod(row.dataName, newValue);
-                });
+                })
+
+            if (row.placeHolder != undefined)
+            {
+                textW.attr("placeholder", row.placeHolder)
+            }
+
+            if (row.topMargin !== undefined)
+            {
+                textW.css("margin-top", row.topMargin + "px")
+            }
 
             this.applyCommonProperties(textW, tdW, row);
 
@@ -912,15 +1204,16 @@ module beachPartyApp
 
                 textW.value(value);
             });
-
         }
 
         createNumAdjuster(prompt: string, rowW: vp.dom.IWrapperOuter, tdW: vp.dom.IWrapperOuter, row: any)
         {
+            var value = this.getValue(row.dataName);
+
             tdW.append("span")
                 .addClass("panelPrompt")
                 .text(prompt)
-                .title(row.tip);
+                .title(row.tip)
 
             var parentId = "numAdjuster" + nextId++;
 
@@ -932,24 +1225,40 @@ module beachPartyApp
                 //---- add num adjuster in a new table <td> ----
                 tdW2 = rowW.append("td")
                     .css("position", "relative")
-                    .css("left", "-12px");       // make it align correctly with other controls starting in new column;
             }
             else
             {
                 tdW2 = tdW;
+
+                //---- adjust for edge case of layout ----
+                if (this._firstRowOfContent)
+                {
+                    tdW
+                        .css("position", "relative")
+                        .css("top", "-15px")
+                }
             }
 
-            tdW2.append("span")
-                .addClass(parentId)
-                .css("margin-top", "-10px")
-                .css("margin-bottom", "8px")
-                .css("margin-left", "10px")
+            var parentW = tdW2.append("span")
+                .id(parentId)
+                //.css("margin-bottom", "8px")
+                //.css("margin-left", "10px")
                 .css("position", "relative")
-                .css("top", "8px");
+
+            if (row.newCol)       
+            {
+                parentW.css("top", "3px")
+                parentW.css("left", "-4px")
+            }
+            else
+            {
+                parentW.css("top", "15px")
+                parentW.css("left", "4px")
+            }
 
             var initValue = this.getValue(row.dataName);
 
-            var numAdjuster = new NumAdjusterClass(this.application, this.container, parentId, "", initValue, row.min, row.max, row.tip,
+            var numAdjuster = createNumAdjusterClass(this.application, this.container, parentId, "", initValue, row.min, row.max, row.tip,
                 AdjusterStyle.bottomInPanel, row.roundValues, row.syncChanges, row.spreadLow);
 
             numAdjuster.show(true);
@@ -958,7 +1267,8 @@ module beachPartyApp
             var thisObj = this.getDataOwner(row.dataName);
             thisObj.registerForRemovableChange(row.dataName, this, (name, dataChanger) =>
             {
-                if (dataChanger._className !== "numAdjusterClass")       //  (dataChanger != numAdjuster)
+                //---- allow changes from ourselves so that when app ajusts our requested value, we can reflect the adjustment ----
+                if (dataChanger._className != "numAdjusterClass")       //  (dataChanger != numAdjuster)
                 {
                     var value = this.getValue(row.dataName);
                     numAdjuster.value(value);
@@ -974,87 +1284,105 @@ module beachPartyApp
                 var thisObj = this.getDataOwner(row.dataName);
                 thisObj.setDataWithChanger(row.dataName, value, numAdjuster);
 
-                this.onUserAction();
+                this.onUserAction(row);
             });
         }
 
-        showColorPicker(includeTransparent: boolean, propName, ddText, chevronW, e)
+        showColorPicker(includeTransparent: boolean, propName, ddText, chevronW, e, row)
         {
-            var picker = this.callPanelCreator("createColorPicker", includeTransparent, (mid) =>
+            var parentElem = ddText[0].parentElement;
+            var openerIds = parentElem.id;
+
+            var picker = this.callPanelCreator("createColorPicker", openerIds, includeTransparent, (mid) =>
             {
                 var value = (mid.text) ? mid.text : mid;
 
-                ddText.text(value);
+                ddText.text(value)
                 this.setValue(propName, value);
 
-                this.onUserAction();
-            }, this._root, chevronW);
+                this.onUserAction(row);
+            }, this._root);
 
             this.openPicker(picker, chevronW);
         }
 
         showDataPicker(propName, ddText, chevronW, e)
         {
-            var picker = this.callPanelCreator("createDataPicker", (mid) =>
+            var parentElem = ddText[0].parentElement;
+            var openerIds = parentElem.id;
+
+            var picker = this.callPanelCreator("createDataPicker", openerIds, (mid) =>
             {
                 var value = (mid.text) ? mid.text : mid;
 
-                ddText.text(value);
+                ddText.text(value)
                 this.setValue(propName, value);
 
-                //this.onUserAction();
+                //this.onUserAction(row);
                 this.close();
             });
 
             this.openPicker(picker, chevronW);
         }
 
-        showEnumPicker(propName, textW: vp.dom.singleWrapperClass, chevronW, enumType, e)
+        showEnumPicker(propName, textW: vp.dom.singleWrapperClass, chevronW, enumType, e, row)
         {
-            var picker = this.callPanelCreator("createEnumPicker", enumType, (mid) =>
+            var parentElem = textW[0].parentElement;
+            var openerIds = parentElem.id;
+
+            var picker = this.callPanelCreator("createEnumPicker", openerIds, enumType, (mid) =>
             {
                 var value = <string>(mid.text) ? mid.text : mid;
 
                 //---- user select "value" from enum dropdown ----
-                textW.text(value);
+                textW.text(value)
 
-                //---- sometimes we upperCase first letter for UI, but we start all BeachParty enum values with lower case ----
-                var lcValue = AppUtils.lowerCaseFirstLetter(value);
-
-                this.setValue(propName, lcValue);
-
-                this.onUserAction();
-            }, this._root, chevronW);
-
-            this.openPicker(picker, chevronW);
-        }
-
-        showScrubberPicker(propName, textW: vp.dom.singleWrapperClass, chevronW, enumType, e)
-        {
-            var picker = this.callPanelCreator("createScrubberPicker",  (mid) =>
-            {
-                var value = <string>(mid.text) ? mid.text : mid;
-
-                //---- user select "value" from enum dropdown ----
-                textW.text(value);
+                //---- some enums start with lowercase letter which are capitalized for UI ----
+                if (!row.isEnumUppercase)
+                {
+                    value = AppUtils.lowerCaseFirstLetter(value);
+                }
 
                 this.setValue(propName, value);
 
-                this.onUserAction();
+                this.onUserAction(row);
             }, this._root);
 
             this.openPicker(picker, chevronW);
         }
 
-        showShapePicker(propName, ddText, chevronW, e)
+        showScrubberPicker(propName, textW: vp.dom.singleWrapperClass, chevronW, enumType, e, row)
         {
-            var picker = this.callPanelCreator("createShapePicker", (text) =>
+            var parentElem = textW[0].parentElement;
+            var openerIds = parentElem.id;
+
+            var picker = this.callPanelCreator("createScrubberPicker", openerIds, (mid) =>
             {
-                ddText.text(text);
+                var value = <string>(mid.text) ? mid.text : mid;
+
+                //---- user select "value" from enum dropdown ----
+                textW.text(value)
+
+                this.setValue(propName, value);
+
+                this.onUserAction(row);
+            }, this._root);
+
+            this.openPicker(picker, chevronW);
+        }
+
+        showShapePicker(propName, ddText, chevronW, e, row)
+        {
+            var parentElem = ddText[0].parentElement;
+            var openerIds = parentElem.id;
+
+            var picker = this.callPanelCreator("createShapePicker", openerIds, (text) =>
+            {
+                ddText.text(text)
                 this.setValue(propName, text);
 
-                this.onUserAction();
-            }, this._root, chevronW);
+                this.onUserAction(row);
+            }, this._root);
 
             this.openPicker(picker, chevronW);
         }
@@ -1066,68 +1394,71 @@ module beachPartyApp
             if (prompt)
             {
                 // ----create prompt for dropdown ----
-                tdW.append("span")
+                var ddPromptW = tdW.append("span")
                     .addClass("panelPrompt")
                     .title(row.tip)
                     .text(prompt)
                     .css("vertical-align", "right")
-                    .css("margin-right", "4px");
+                    .css("margin-right", "4px")
 
                 if (!row.sameCol)
                 {
-                    tdW = rowW.append("td");
+                    tdW = rowW.append("td")
                 }
             }
 
-            var buttonContainer = tdW
-                .append("div")
-                .addClass("buttonContainer");
-
             //---- create DROPDOWN BUTTON to hold text and chevron ----
-            var ddButton = buttonContainer.append("span")
+            var ddButton = tdW.append("span")
                 .addClass("panelButton")
                 .title(row.tip)
                 .css("cursor", "pointer")
-                .css("white-space", "nowrap");
+                .css("white-space", "nowrap")
+                //.css("padding-top", "-2px")
+                .css("padding-bottom", "4px")
+                .id("ddButton" + JsonPanelClass.nextPickerButtonId++);
+
+            this.applyCommonProperties(ddButton, tdW, row);
 
             // ----create TEXT part of button ----
             var ddText = ddButton.append("span")
                 .addClass("panelButtonText")
                 .css("vertical-align", "middle")
-                .css("text-align", "left");
+                .css("text-align", "left")
 
-            if (row.width !== undefined)
+            if (row.width != undefined)
             {
                 ddText
                     .css("display", "inline-block")
-                    .width(row.width);
+                    .width(row.width)
             }
 
             //---- to workaround issue of mouse "dead zones" around img, try embedding it inside a in-line block span ----
             var divW = ddButton.append("span")
                 .addClass("panelButtonChevron")
                 .css("display", "inline-block")
-                .css("cursor", "pointer");
+                .css("cursor", "pointer")
 
             //---- add dropdown CHEVRON icon ----
-            divW.append("div")
-                // .attr("src", "Images/smallChevron3.png")
-                .addClass("chevron-background")
+            var chevronW = divW.append("img")
+                .attr("src", "Images/smallChevron3.png")
                 .css("margin-left", "4px")
                 .css("margin-bottom", "2px")
                 .css("vertical-align", "bottom")
-                .element()
-                .addEventListener("dragstart", function (e)
+                .attach("dragstart", function (e)
                 {
                     //---- prevent drag of icon ----
                     e.preventDefault();
-                });
+                })
 
-            ddButton.element()
-                .addEventListener("click", (e) =>
+            ddButton
+                .attach("click", (e) =>
                 {
-                    onOpenCallback(row.dataName, ddText, /*chevronW*/buttonContainer, e);//rowW
-                });
+                    AppUtils.callPanelOpen(e, (ee) =>
+                    {
+                        onOpenCallback(row.dataName, ddText, chevronW, e);
+                    })
+                })
+
 
             //---- set initial value ----
             var value = this.getValue(row.dataName);
@@ -1148,20 +1479,97 @@ module beachPartyApp
                 //---- change all enum values to start with a capital letter ----
                     value = AppUtils.capitalizeFirstLetter(value);
                 }
-                ddText.text(value);
+                ddText.text(value)
 
             });
+
+            //---- is this a column picker dropdown? ----
+            if (row.mapToDefaultCol)
+            {
+                //---- when data structure changes (usually a new file), set value to default column ----
+                /*appClass.instance*/this.application.registerForChange("ColInfos", (e) =>
+                {
+                    var value = /*appClass.instance*/this.application.getDefaultCol();
+                    ddText.text(value);
+                    this.setValue(row.dataName, value);
+                });
+            }
+
+
+            if (row.tabIndex !== undefined)
+            {
+                ddButton[0].tabIndex = row.tabIndex;
+            }
+
         }
 
-        showColPicker(propName, ddTextW, chevronW, e)
+        showColumnPicker(propName, ddTextW, chevronW, e)
         {
-            var picker = this.callPanelCreator("createColumnPicker", null, true, (mid) =>
+            var parentElem = ddTextW[0].parentElement;
+            var openerIds = parentElem.id;
+
+            var picker = this.callPanelCreator("createColumnPicker", openerIds, true, (mid) =>
             {
-                ddTextW.text(mid.text);
+                ddTextW.text(mid.text)
                 this.setValue(propName, mid.text);
             });
 
             this.openPicker(picker, chevronW);
+        }
+
+        showTourPicker(propName, ddTextW, chevronW, e)
+        {
+            var parentElem = ddTextW[0].parentElement;
+            var openerIds = parentElem.id;
+
+            var picker = this.callPanelCreator("createTourPicker", openerIds, true, (mid) =>
+            {
+                var newValue = (mid.text) ? mid.text : mid;
+
+                ddTextW.text(newValue);
+                this.setValue(propName, newValue);
+            });
+
+            this.openPicker(picker, chevronW);
+        }
+
+        showScriptPicker(propName, ddTextW, chevronW, e)
+        {
+            var parentElem = ddTextW[0].parentElement;
+            var openerIds = parentElem.id;
+
+            var picker = this.callPanelCreator("createScriptPicker", openerIds, true, (mid) =>
+            {
+                var newValue = (mid.text) ? mid.text : mid;
+
+                ddTextW.text(newValue);
+                this.setValue(propName, newValue);
+            });
+
+            this.openPicker(picker, chevronW);
+        }
+
+        createOpenDataPickerList(propName, rowW, tdW, row: any)
+        {
+            var listBox = this.callPanelCreator("createOpenDataPickerList", tdW[0], true, (mid) =>
+            {
+                var text = (mid.text) ? mid.text : mid;
+                this.setValue(row.dataName, text);
+
+                this.onUserAction(row);
+            });
+
+            if (row.width != undefined)
+            {
+                vp.select(listBox._root).css("width", row.width + "px")
+            }
+
+            if (row.height != undefined)
+            {
+                vp.select(listBox._root).css("height", row.height + "px")
+            }
+
+            return listBox;
         }
 
         createKnownDataPickerList(propName, rowW, tdW, row: any)
@@ -1171,39 +1579,39 @@ module beachPartyApp
                 //ddTextW.text(mid.text)
                 this.setValue(row.dataName, mid.text);
 
-                this.onUserAction();
+                this.onUserAction(row);
             });
 
-            if (row.width !== undefined)
+            if (row.width != undefined)
             {
-                vp.select(listBox._root).css("width", row.width + "px");
+                vp.select(listBox._root).css("width", row.width + "px")
             }
 
-            if (row.height !== undefined)
+            if (row.height != undefined)
             {
-                vp.select(listBox._root).css("height", row.height + "px");
+                vp.select(listBox._root).css("height", row.height + "px")
             }
 
             return listBox;
         }
 
-        createColPickerList(prompt: string, rowW, tdW, row: any)
+        createColumnPickerList(prompt: string, rowW, tdW, row: any)
         {
             if (prompt)
             {
                 // ----create prompt for dropdown ----
-                tdW.append("span")
+                var ddPrompt = tdW.append("span")
                     .addClass("panelPrompt")
                     .title(row.tip)
                     .text(prompt)
                     .css("vertical-align", "right")
-                    .css("margin-right", "4px");
+                    .css("margin-right", "4px")
 
                 if (!row.sameCol)
                 {
                     //---- for column picker list, we start a new line ----
-                    tdW = rowW.append("td");
-                    tdW.append("br");
+                    tdW = rowW.append("td")
+                    tdW.append("br")
                 }
             }
 
@@ -1212,21 +1620,30 @@ module beachPartyApp
                 //ddTextW.text(mid.text)
                 this.setValue(row.dataName, mid.text);
 
-                this.onUserAction();
+                this.onUserAction(row);
             });
 
-            //if (row.width != undefined)
-            //{
-            //    vp.select(listBox._root).css("width", row.width + "px")
-            //}
-
-            //if (row.height != undefined)
-            //{
-            //    vp.select(listBox._root).css("height", row.height + "px")
-            //}
+            //---- listen to associated property changes & update HTML ----
+            var thisObj = this.getDataOwner(row.dataName);
+            thisObj.registerForRemovableChange(row.dataName, this, (e) =>
+            {
+                var value = this.getValue(row.dataName);
+                listBox.selectedValue(value);
+            });
 
             var listBoxW = vp.select(listBox._root);
             this.applyCommonProperties(listBoxW, tdW, row, false);
+
+            //---- when data structure changes (usually a new file), rebuild the listBox ----
+            /*appClass.instance*/this.application.registerForChange("ColInfos", (e) =>
+            {
+                var colItems = this.callPanelCreator("getMappingCols", row.includeNone);
+                listBox.buildList(colItems);
+            });
+
+            //---- set initial value ----
+            var value = this.getValue(row.dataName);
+            listBox.selectedValue(value);
 
             return listBox;
         }
@@ -1242,11 +1659,15 @@ module beachPartyApp
             {
                 this.openWithoutPosition();
 
-//                 var rcChevron = chevronW.getBounds(true),
-//                     buttonBounds = vp.select(chevronW, ".panelButton").getBounds(true);
+//                 var rcChevron = chevronW.getBounds(false);
+//                 var pickerElem = picker.getRootElem();
+//                 var rcPicker = vp.select(pickerElem).getBounds(false);
+// 
+//                 //---- right align picker with right of text/chevon box ----
+//                 var x = rcChevron.right + 4 - rcPicker.width;
 // 
 //                 //---- ENUM PICKERS seem to need this adjustment - does this break anything else? ----
-//                 picker.openWithoutOverlap(rcChevron.width - buttonBounds.width, rcChevron.bottom, false);
+//                 picker.openWithoutOverlap(x + 2, rcChevron.bottom + 5);
             }
         }
 
@@ -1255,21 +1676,29 @@ module beachPartyApp
             var cbName = "checkbox" + nextId++;
 
             tdW
-                .attr("colSpan", "2");
+                .attr("colSpan", "2")
+
+            var divW = tdW.append("div");
+
+            if (row.id)
+            {
+                divW.id(row.id);
+                row.id = null;
+            }
 
             //---- create CHECKBOX ----
-            var cbW = tdW.append("input")
+            var cbW = divW.append("input")
                 .addClass("panelCheckbox")
                 .attr("type", "checkbox")
-                .addClass(cbName)
+                .attr("id", cbName)
                 .title(row.tip)
                 .attach("dblclick", (e) =>
                 {
                     e.preventDefault();
                     cbW[0].click();
-                });
+                })
 
-            var lab = tdW.append("label")
+            var lab = divW.append("label")
                 .addClass("panelPrompt")
                 .attr("for", cbName)            // relays click to element with id=cbName
                 .text(row.checkbox)
@@ -1281,15 +1710,15 @@ module beachPartyApp
                     e.preventDefault();
                     lab[0].click();
 
-                    this.onUserAction();
-                });
+                    this.onUserAction(row);
+                })
 
             cbW.attach("click", (e) =>
             {
                 var value = cbW[0].checked;
                 this.setValue(row.dataName, value);
 
-                this.onUserAction();
+                this.onUserAction(row);
             });
 
             var value = this.getValue(row.dataName);
@@ -1298,7 +1727,7 @@ module beachPartyApp
                 cbW[0].checked = true;
             }
 
-            //---- list to associated property changes & update HTML ----
+            //---- listen to associated property changes & update HTML ----
             var thisObj = this.getDataOwner(row.dataName);
             thisObj.registerForRemovableChange(row.dataName, this, (e) =>
             {
@@ -1310,10 +1739,16 @@ module beachPartyApp
                 }
                 else
                 {
+                    var elem = <HTMLElement>cbW[0];
                     cbW[0].checked = false;
                 }
 
             });
+
+            if (row.topMargin !== undefined)
+            {
+                cbW.css("margin-top", row.topMargin + "px");
+            }
 
             this.applyCommonProperties(cbW, tdW, row);
 
@@ -1327,24 +1762,27 @@ module beachPartyApp
                 row.dataName = this._groupDataName;
             }
 
-            var isUserAction = (row.userAction === null || row.userAction === undefined || row.userAction === true);
-
             //---- create RADIOBUTTON ----
             var cb = tdW.append("input")
                 .addClass("panelRadio")
                 .attr("type", "radio")
-                .addClass(rbName)
+                .attr("id", rbName)
                 .attr("name", row.dataName)         // for grouping radio buttons together
                 .title(row.tip)
                 .attach("dblclick", (e) =>
                 {
                     e.preventDefault();
                     cb[0].click();
-                });
+                })
 
-            if (row.leftMargin !== undefined)
+            if (row.checked)
             {
-                cb.css("margin-left", row.leftMargin + "px");
+                cb[0].checked = true;
+            }
+
+            if (row.leftMargin != undefined)
+            {
+                cb.css("margin-left", row.leftMargin + "px")
             }
 
             var lab = tdW.append("label")
@@ -1359,11 +1797,8 @@ module beachPartyApp
                     e.preventDefault();
                     lab[0].click();
 
-                    if (isUserAction)
-                    {
-                        this.onUserAction();
-                    }
-                });
+                    this.onUserAction(row);
+                })
 
             //---- on CLICK, update OWNER property ----
             cb.attach("click", (e) =>
@@ -1373,10 +1808,7 @@ module beachPartyApp
                 {
                     this.setValue(row.dataName, row.value);
 
-                    if (isUserAction)
-                    {
-                        this.onUserAction();
-                    }
+                    this.onUserAction(row);
                 }
             });
 
@@ -1414,7 +1846,7 @@ module beachPartyApp
 
         // var desc = w.panelDescriptions[panelName];
 
-        panel = new JsonPanelClass(application, settings, container, openerIds, dataOwner, panelName, desc, undefined, isCol1Indent, hideClose, addAutoClose, addNormalClose);
+        panel = new JsonPanelClass(application, settings, container, openerIds, dataOwner, panelName, desc, undefined, isCol1Indent);
 
         var rc = vp.dom.getBounds(panel.getRootElem(), true);
 

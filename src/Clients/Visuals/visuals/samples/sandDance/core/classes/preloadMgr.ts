@@ -1,5 +1,5 @@
 ﻿///-----------------------------------------------------------------------------------------------------------------
-/// preloadMgr.ts.  Copyright (c) 2015 Microsoft Corporation.
+/// preloadMgr.ts.  Copyright (c) 2016 Microsoft Corporation.
 ///     - manages the list of preload items (each describes how to load a known file).
 ///-----------------------------------------------------------------------------------------------------------------
 
@@ -259,16 +259,6 @@ module beachParty
                 sqlServer.maxRecords = 50 * 1000;
                 sqlServer.recordCount = 221353;                 // FIX THIS
                 preloads.push(sqlServer);
-
-                //---- AZURE account expired - this is no longer available ----
-                ////---- AZURE SQL test ----
-                //var azureSql = new bps.Preload("Azure SQL Test",
-                //    "Server=tcp:ckwd6fictd.database.windows.net,1433;Database=RolandFour;User ID=rfernand@ckwd6fictd;Password=azure4Me;Trusted_Connection=False;Encrypt=True;Connection Timeout=30;",
-                //    "SQL test data, hosted in Azure");
-                //azureSql.fileType = bps.FileType.sql;
-                //azureSql.tableName = "TableOne";
-                //azureSql.recordCount = 5280;                 // FIX THIS
-                //preloads.push(azureSql);
 
                 //---- KNOWN DATA (our "preloads" table)  ----
                 var knownData = new bps.Preload("KnownData", "knownData.json", "The datasets that we know how to open");

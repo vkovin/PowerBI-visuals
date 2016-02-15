@@ -7,7 +7,7 @@
 
 module beachParty
 {
-    var useLinePrim = false;
+    var useLinePrim = true;
 
     export class LinePlotClass extends BaseGlVisClass
     {
@@ -20,7 +20,7 @@ module beachParty
 
             if (useLinePrim)
             {
-                this._view.drawingPrimitive(bps.DrawPrimitive.line);
+                this._view.drawingPrimitive(bps.DrawPrimitive.linePairs);
             }
         }
 
@@ -47,60 +47,57 @@ module beachParty
             return { cx: cx, cy: cy, width: width, theta: theta };
         }
 
-        layoutDataForRecord(i: number, dc: DrawContext)
+        layoutDataForRecord(i: number, dc: DrawContext, dr: bps.LayoutResult)
         {
             var nv = dc.nvData;
             var scales = dc.scales;
 
             var sx = this.scaleColData(nv.x, i, scales.x);
             var sy = this.scaleColData(nv.y, i, scales.y);
-            var z = -0;     // for correct rotation about Y axis
-            var depth = dc.defaultDepth2d;      // test out 3d cube in a 2d shape;
+
+            var sz = this.scaleColData(nv.size, i, scales.size, 1);
 
             if (useLinePrim)
             {
-                var x = sx;
-                var y = sy;
-                var width = this.scaleColData(nv.size, i, scales.size, 1);
-                var height = width;
+                dr.x = sx;
+                dr.y = sy;
+                dr.width = sz;
+                dr.height = dr.width;
             }
             else
             {
-
                 if (this._ptLast == null)
                 {
-                    var x = 0;
-                    var y = 0;
-                    var width = 0;
-                    var height = 0;
+                    dr.x = 0;
+                    dr.y = 0;
+                    dr.width = 0;
+                    dr.height = 0;
                 }
                 else
                 {
                     var result = this.positionLine(sx, sy, this._ptLast.x, this._ptLast.y);
 
-                    var x = result.cx;
-                    var y = result.cy;
-                    var width = this._inverseSizeFactor * result.width;     // prevent shader from scaling this width
-                    var height = .005;
+                    dr.x = result.cx;
+                    dr.y = result.cy;
+                    dr.width = sz * this._inverseSizeFactor * result.width;     // prevent shader from scaling this width
+                    dr.height = .005;            // 1;
+                    dr.theta = result.theta;
 
                     ////---- rotate about z ----
-                    //var sin = Math.sin(theta);
-                    //var cos = Math.cos(theta);
-                    //x = x * cos - y * sin;
-                    //y = x * sin + y * cos;
+                    //var sin = Math.sin(dr.theta);
+                    //var cos = Math.cos(dr.theta);
+                    //dr.x = dr.x * cos - dr.y * sin;
+                    //dr.y = dr.x * sin + dr.y * cos;
                 }
             }
 
-            var colorIndex = this.scaleColData(nv.colorIndex, i, scales.colorIndex);
-            var imageIndex = this.scaleColData(nv.imageIndex, i, dc.scales.imageIndex);
-            var opacity = 1;
+            dr.z = -0;     // for correct rotation about Y axis
+            dr.depth = dc.defaultDepth2d      // test out 3d cube in a 2d shape
+
+            dr.colorIndex = this.scaleColData(nv.colorIndex, i, scales.colorIndex);
+            dr.imageIndex = this.scaleColData(nv.imageIndex, i, dc.scales.imageIndex);
 
             this._ptLast = { x: sx, y: sy };
-
-            return {
-                x: x, y: y, z: z, width: width, height: height, depth: depth, colorIndex: colorIndex, opacity: opacity,
-                imageIndex: imageIndex, theta: 0,
-            };
         }
     }
 }

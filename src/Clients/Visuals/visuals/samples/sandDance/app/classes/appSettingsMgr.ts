@@ -25,11 +25,15 @@ module beachPartyApp
         _shapeImage: string;
         _canvasColor = "black";
         _drawingPrimitive: bps.DrawPrimitive = bps.DrawPrimitive.cube;
-        _isContinuousDrawing = true;
+        _instancingParams = new bps.InstancingParams();
+        _isContinuousDrawing = false;
+        _isChartPanelOpen = false;
         _chartFrameData: bps.ChartFrameData;
         _animationData: bps.AnimationData;
         _hoverParams: bps.HoverParams;
         _isTooltipsEnabled = true;
+        _hoverOnDetailView: boolean;
+        _hoverOnMouseMove: boolean;
         _selectionParams: bps.SelectionParams;
         _isMenuTextVisible: boolean;
         _isMenuIconVisible: boolean;
@@ -47,16 +51,62 @@ module beachPartyApp
         _isPlaybackLooping: boolean;
         _rememberLastFile = true;
         _rememberLastSession = true;
-        _initFilename: string;
-        _initialChartType = bps.ChartType.Column;
+        _initFileParams: bps.WorkingDataParams;
+        _initialChartType: bps.ChartType;
         _initialLayout = bps.Layout.Random;
-        _isShowingChartStatus = false;
-        _isShowingLastCycleStats = false;
+        _isShowingDrawStats = false;
+        _isShowingLastCycle = false;
         _isShowingEventStats = false;
         _isErrorReportingDisabled = false;
         _automatedTestName = "demoVoteTest.js";
-        _cacheLocalFiles: boolean;
-        _cacheWebFiles: boolean;
+        _axisLabelStyle: string;
+        _legendLabelStyle: string;
+        _predefinedCustomChart = "Squarify";
+        _showCountsInColPicker: boolean;
+        _showTypesInColPicker: boolean;
+        _mapByColorChannels: boolean;
+        _isScriptsEnabled: boolean;
+        _isUserLoggingEnabled: boolean;
+
+        //---- experimental features ----
+        _is3dNavEnabled: boolean;
+        _isSelectionModeEnabled: boolean;
+        _isNewViewEnabled: boolean;
+        _isScrubberEnabled: boolean;
+        _isClusteringEnabled: boolean;
+        _iconWidth: number;
+        _iconOpacity: number;
+        _isRedoEnabled: boolean;
+        _isDataTipEnabled: boolean;
+        _isSlicerEnabled: boolean;
+        _isShapeByEnabled: boolean;
+        _isSizeByEnabled: boolean;
+        _isTextByEnabled: boolean;
+        _isLineByEnabled: boolean;
+        _isTourEnabled: boolean;
+        _runTourOnStartUp: boolean;
+        _dataCacheParams: bps.DataCacheParams;
+
+        //---- core charts ----
+        _isGridEnabled: boolean;
+        _isColumnEnabled: boolean;
+        _isScatterEnabled: boolean;
+        _isDensityEnabled: boolean;
+        _isStacksEnabled: boolean;
+        _isSquarifyEnabled: boolean;
+
+        //---- experimental charts ----
+        _isRandomEnabled: boolean;
+        _isPoissonEnabled: boolean;
+        _isSpiralEnabled: boolean;
+        _isLineEnabled: boolean;
+        _isRadialEnabled: boolean;
+        _isXbandEnabled: boolean;
+        _isYbandEnabled: boolean;
+        _isScatter3DEnabled: boolean;
+        _isBarEnabled: boolean;
+        _isViolinEnabled: boolean;
+        _isCustomEnabled: boolean;
 
         private saveSettingsHandler: (settings: any, type: sandDance.SettingsType) => void;
         private loadSettingsHandler: (type: sandDance.SettingsType) => any;
@@ -88,12 +138,52 @@ module beachPartyApp
             this.shapeColor("#0cf");
             this.shapeImage("none");
             this.canvasColor("black");
-            this.drawingPrimitive("auto");
+            this.drawingPrimitive("cube");      // "auto");
             this.isContinuousDrawing(false);
+            this.isChartPanelOpen(false);
+            this.isInstancingEnabled(true);
 
             this._chartFrameData = new bps.ChartFrameData();
             this._chartFrameData.padding = { left: 1, top: 1, right: 15, bottom: 1 };
             this.chartFrameOpacity(1);
+
+            //---- FEATURES tab ----
+            this._is3dNavEnabled = true;
+            this._isSelectionModeEnabled = false;
+            this._isNewViewEnabled = false;
+            this._isScrubberEnabled = false;
+            this._isClusteringEnabled = false;
+            this._isRedoEnabled = false;
+            this._isDataTipEnabled = true;
+            this._isSlicerEnabled = false;
+            this._isShapeByEnabled = false;
+            this._isSizeByEnabled = false;
+            this._isTextByEnabled = false;
+            this._isLineByEnabled = false;
+            this._isTourEnabled = true;
+            this._mapByColorChannels = false;
+            this._isScriptsEnabled = false;
+            this._isUserLoggingEnabled = false;
+
+            //---- CHARTS tab ----
+            this._isGridEnabled = true;
+            this._isColumnEnabled = true;
+            this._isScatterEnabled = true;
+            this._isDensityEnabled = true;
+            this._isStacksEnabled = true;
+            this._isSquarifyEnabled = true;
+
+            this._isRandomEnabled = false;
+            this._isPoissonEnabled = false;
+            this._isSpiralEnabled = false;
+            this._isLineEnabled = false;
+            this._isRadialEnabled = false;
+            this._isXbandEnabled = false;
+            this._isYbandEnabled = false;
+            this._isScatter3DEnabled = false;
+            this._isBarEnabled = false;
+            this._isViolinEnabled = false;
+            this._isCustomEnabled = false;
 
             //---- ANIMATION tab ----
             var ad = new bps.AnimationData();
@@ -102,16 +192,24 @@ module beachPartyApp
             //---- HOVER tab ----
             this._hoverParams = new bps.HoverParams();
             this.isTooltipsEnabled(false);
+            this.hoverOnDetailView(true);
+            this.hoverOnMouseMove(false);
 
             //---- SELECTION tab ----
             this._selectionParams = new bps.SelectionParams();
 
             //---- UI tab ----
-            this.isMenuTextVisible(false);
-            this.isMenuIconVisible(true);
+            this.isMenuTextVisible(true);
+            this.isMenuIconVisible(false);
+            this.iconWidth(30);
+            this.iconOpacity(1);
             this.isMenuChevronVisible(false);
+            this.axisLabelStyle("font: 16px Calibri; fill: white;");
+            this.legendLabelStyle("font: 16px Calibri; color: white;");
             this.isColPickerSorted(true);
-            this.panelOpacity(.9);
+            this.panelOpacity(1);
+            this.showCountsInColPicker(false);
+            this.showTypesInColPicker(true);
 
             //---- 3D tab ----
             this.is3dGridAlwaysOn(false);
@@ -121,8 +219,9 @@ module beachPartyApp
             this.ambientLightLevel(.25);
 
             //---- DATA tab ----
-            this.cacheLocalFiles(true);
-            this.cacheWebFiles(true);
+            this._dataCacheParams = new bps.DataCacheParams();
+            this._dataCacheParams.cacheLocalFiles = true;
+            this._dataCacheParams.cacheWebFiles = true;
             this.useNiceNumbers(false);
             this.defaultBins(9);
 
@@ -132,16 +231,20 @@ module beachPartyApp
 
             //---- STARTUP tab ----
             this.rememberLastFile(true);
-            this.rememberLastSession(true);
-            this._initFilename = null; //"Titanic"        // for shipping, need a faster loaded dataset
+            this.rememberLastSession(false);       // turn OFF until it gets more stable
+            this._initFileParams = null;//new bps.WorkingDataParams("Titanic", null, "known");        // for shipping, need a faster loaded dataset
             this.initialChartType("Column");
             this.initialLayout("Grid");
+            this._runTourOnStartUp = false;//true      // not surfaced on tab
 
             //---- DEBUG tab ----
-            this.isShowingChartStatus(false);
-            this.isShowingLastCycle(true);
+            this.isShowingDrawStats(false);
+            this.isShowingLastCycle(false);
             this.isShowingEventStats(false);
             this.isErrorReportingDisabled(false);
+
+            //---- CHART OPTIONS panel ----
+            this.predefinedCustomChart("Squarify");
 
             this._isSavingSettingsDisabled = false;
         }
@@ -152,9 +255,48 @@ module beachPartyApp
             {
                 var appSettings = new AppSettings(AppClass.buildId);
 
-                appSettings.showDebugStatus = this._isShowingChartStatus;
-                appSettings.showLastCycle = this._isShowingLastCycleStats;
-                appSettings.showEventStats = this._isShowingEventStats;
+                //---- FEATURES tab ----
+                appSettings.is3dNavEnabled = this._is3dNavEnabled;
+                appSettings.isSelectionModeEnabled = this._isSelectionModeEnabled;
+                appSettings.isNewViewEnabled = this._isNewViewEnabled;
+                appSettings.isScrubberEnabled = this._isScrubberEnabled;
+                appSettings.isClusteringEnabled = this._isClusteringEnabled;
+                appSettings.isRedoEnabled = this._isRedoEnabled;
+                appSettings.isDataTipEnabled = this._isDataTipEnabled;
+                appSettings.isSlicerEnabled = this._isSlicerEnabled;
+                appSettings.isShapeByEnabled = this._isShapeByEnabled;
+                appSettings.isSizeByEnabled = this._isSizeByEnabled;
+                appSettings.isTextByEnabled = this._isTextByEnabled;
+                appSettings.isLineByEnabled = this._isLineByEnabled;
+                appSettings.isTourEnabled = this._isTourEnabled;
+                appSettings.runTourOnStartUp = this._runTourOnStartUp;
+                appSettings.mapByColorChannels = this._mapByColorChannels;
+                appSettings.isScriptsEnabled = this._isScriptsEnabled;
+                appSettings.isUserLoggingEnabled = this._isUserLoggingEnabled;
+
+                //---- CHARTS tab----
+                appSettings.isGridEnabled = this._isGridEnabled;
+                appSettings.isColumnEnabled = this._isColumnEnabled;
+                appSettings.isScatterEnabled = this._isScatterEnabled;
+                appSettings.isDensityEnabled = this._isDensityEnabled;
+                appSettings.isStacksEnabled = this._isStacksEnabled;
+                appSettings.isSquarifyEnabled = this._isSquarifyEnabled;
+
+                appSettings.isRandomEnabled = this._isRandomEnabled;
+                appSettings.isPoissonEnabled = this._isPoissonEnabled;
+                appSettings.isSpiralEnabled = this._isSpiralEnabled;
+                appSettings.isLineEnabled = this._isLineEnabled;
+                appSettings.isRadialEnabled = this._isRadialEnabled;
+                appSettings.isXbandEnabled = this._isXbandEnabled;
+                appSettings.isYbandEnabled = this._isYbandEnabled;
+                appSettings.isScatter3DEnabled = this._isScatter3DEnabled;
+                appSettings.isBarEnabled = this._isBarEnabled;
+                appSettings.isViolinEnabled = this._isViolinEnabled;
+                appSettings.isCustomEnabled = this._isCustomEnabled;
+
+                appSettings.isShowingDrawStats = this._isShowingDrawStats;
+                appSettings.isShowingLastCycle = this._isShowingLastCycle;
+                appSettings.isShowingEventStats = this._isShowingEventStats;
                 appSettings.isErrorReportingDisabled = this._isErrorReportingDisabled;
 
                 appSettings.shapeColor = this._shapeColor;
@@ -167,13 +309,16 @@ module beachPartyApp
 
                 if (this._rememberLastFile)
                 {
-                    appSettings.lastFileName = null;//appClass.instance._filename;
+                    appSettings.lastFileParams = null;///*appClass.instance*/this.application.getCurrentFileParams();
                 }
 
                 appSettings.initialChartType = this._initialChartType;
                 appSettings.initialLayout = this._initialLayout;
 
+                //---- UI ----
                 appSettings.isColPickerSorted = this._isColPickerSorted;
+                appSettings.showCountsInColPicker = this._showCountsInColPicker;
+                appSettings.showTypesInColPicker = this._showTypesInColPicker;
                 appSettings.playbackDuration = this._playbackDuration;
                 appSettings.isPlaybackLooping = this._isPlaybackLooping;
 
@@ -181,18 +326,27 @@ module beachPartyApp
                 appSettings.isLightingAlwaysOn = this._isLightingAlwaysOn;
                 appSettings.ambientLightLevel = this.ambientLightLevel();
                 appSettings.isContinuousDrawing = this._isContinuousDrawing;
+                appSettings.isChartPanelOpen = this._isChartPanelOpen;
+                appSettings.isInstancingEnabled = this._instancingParams.isInstancingEnabled;
                 appSettings.isTooltipsEnabled = this._isTooltipsEnabled;
+                appSettings.hoverOnDetailView = this._hoverOnDetailView;
+                appSettings.hoverOnMouseMove = this._hoverOnMouseMove;
                 appSettings.is3dGridAlwaysOn = this._is3dGridAlwaysOn;
                 appSettings.showWheelDuringTransformMode = this._showWheelDuringTransformMode;
 
                 appSettings.isMenuTextVisible = this._isMenuTextVisible;
                 appSettings.isMenuIconVisible = this._isMenuIconVisible;
+                appSettings.iconWidth = this._iconWidth;
+                appSettings.iconOpacity = this._iconOpacity;
+
                 appSettings.isMenuChevronVisible = this._isMenuChevronVisible;
+                appSettings.axisLabelStyle = this._axisLabelStyle;
+                appSettings.legendLabelStyle = this._legendLabelStyle;
+                appSettings.predefinedCustomChart = this._predefinedCustomChart;
                 appSettings.drawingPrimitive = this.drawingPrimitive();
                 appSettings.panelOpacity = this.panelOpacity();
 
-                appSettings.cacheLocalFiles = this.cacheLocalFiles();
-                appSettings.cacheWebFiles = this.cacheWebFiles();
+                appSettings.dataCacheParams = this._dataCacheParams;
                 appSettings.useNiceNumbers = this.useNiceNumbers();
                 appSettings.hoverParams = this._hoverParams;
                 appSettings.selectionParams = this._selectionParams;
@@ -204,8 +358,9 @@ module beachPartyApp
 
                 this.saveSettingsHandler(appSettings, sandDance.SettingsType.application);
 
-                // var str = JSON.stringify(appSettings);
-                // localStorage["appSettings"] = str;
+//                 var str = JSON.stringify(appSettings);
+// 
+//                 beachParty.localStorageMgr.save(beachParty.StorageType.appSettings, null, null, str);
             }
         }
 
@@ -216,226 +371,188 @@ module beachPartyApp
 
         saveSessionToLocalStorage()
         {
-            if (true) //localStorage
+            var preload = this.undoMgr.getCurrentInsight();
+
+            if (preload)
             {
-                var preload = this.undoMgr.getCurrentInsight();
+                preload.name = "$lastSession";
+            }
 
-                if (preload)
-                {
-                    preload.name = "$lastSession";
-                }
+//             var strPreload = JSON.stringify(preload);
+// 
+//                 beachParty.localStorageMgr.save(beachParty.StorageType.sessionShare,
+//                     beachParty.StorageSubType.lastSessionState, null, strPreload);
 
-                // var strPreload = JSON.stringify(preload);
-                // localStorage[key] = strPreload;
+            this.saveSettingsHandler(preload, sandDance.SettingsType.session);
+        }
 
-                this.saveSettingsHandler(preload, sandDance.SettingsType.session);
+        loadSettingUndef(appSettings: AppSettings, name: string)
+        {
+            var setting = appSettings[name];
+            if (setting !== undefined)
+            {
+                this[name](setting);
             }
         }
 
-        public loadAppSettings()//TODO: load settings from PowerBI.
+        loadSettingGetter(appSettings: AppSettings, name: string)
         {
-            if (true)//localStorage
+            var setting = appSettings[name];
+            if (setting !== undefined && setting != this[name]())
             {
-                var str = "Hello";//localStorage["appSettings"];
-                if (str && str !== "")
+                this[name](setting);
+            }
+        }
+
+        loadSettingDirect(appSettings: AppSettings, name: string)
+        {
+            var setting = appSettings[name];
+            if (setting !== undefined && setting != this["_"+name])
+            {
+                this[name](setting);
+            }
+        }
+
+        loadAppSettings()
+        {
+            // var str = beachParty.localStorageMgr.get(beachParty.StorageType.appSettings, null, null);
+            if (true)//str && str != "")
+            {
+                this._isSavingSettingsDisabled = true;
+
+                try
                 {
-                    this._isSavingSettingsDisabled = true;
+                    var appSettings = this.loadSettingsHandler && this.loadSettingsHandler(sandDance.SettingsType.application);//<AppSettings>JSON.parse(str);
 
-                    try
+                    //---- only use if versionNum of appSettings is the same as the current version ----
+                    if (appSettings.versionNum == AppClass.buildId)
                     {
-                        var appSettings = this.loadSettingsHandler && this.loadSettingsHandler(sandDance.SettingsType.application);//<AppSettings>JSON.parse(str);
+                        //---- FEATURES TAB ----
+                        this.loadSettingDirect(appSettings, "is3dNavEnabled");
+                        this.loadSettingDirect(appSettings, "isSelectionModeEnabled");
+                        this.loadSettingDirect(appSettings, "isNewViewEnabled");
+                        this.loadSettingDirect(appSettings, "isScrubberEnabled");
+                        this.loadSettingDirect(appSettings, "isClusteringEnabled");
+                        this.loadSettingDirect(appSettings, "isRedoEnabled");
+                        this.loadSettingDirect(appSettings, "isDataTipEnabled");
+                        this.loadSettingDirect(appSettings, "isSlicerEnabled");
+                        this.loadSettingDirect(appSettings, "isShapeByEnabled");
+                        this.loadSettingDirect(appSettings, "isSizeByEnabled");
+                        this.loadSettingDirect(appSettings, "isTextByEnabled");
+                        this.loadSettingDirect(appSettings, "isLineByEnabled");
+                        this.loadSettingDirect(appSettings, "isTourEnabled");
+                        this.loadSettingDirect(appSettings, "runTourOnStartUp");
+                        this.loadSettingDirect(appSettings, "mapByColorChannels");
+                        this.loadSettingDirect(appSettings, "isScriptsEnabled");
+                        this.loadSettingDirect(appSettings, "isUserLoggingEnabled");
 
-                        //---- only use if versionNum of appSettings is the same as the current version ----
-                        if (appSettings && appSettings.versionNum === AppClass.buildId)
+                        //---- CHARTS tab ----
+                        this.loadSettingDirect(appSettings, "isGridEnabled");
+                        this.loadSettingDirect(appSettings, "isColumnEnabled");
+                        this.loadSettingDirect(appSettings, "isScatterEnabled");
+                        this.loadSettingDirect(appSettings, "isDensityEnabled");
+                        this.loadSettingDirect(appSettings, "isStacksEnabled");
+                        this.loadSettingDirect(appSettings, "isSquarifyEnabled");
+
+                        this.loadSettingDirect(appSettings, "isRandomEnabled");
+                        this.loadSettingDirect(appSettings, "isPoissonEnabled");
+                        this.loadSettingDirect(appSettings, "isSpiralEnabled");
+                        this.loadSettingDirect(appSettings, "isLineEnabled");
+                        this.loadSettingDirect(appSettings, "isRadialEnabled");
+                        this.loadSettingDirect(appSettings, "isXbandEnabled");
+                        this.loadSettingDirect(appSettings, "isYbandEnabled");
+                        this.loadSettingDirect(appSettings, "isScatter3DEnabled");
+                        this.loadSettingDirect(appSettings, "isBarEnabled");
+                        this.loadSettingDirect(appSettings, "isViolinEnabled");
+                        this.loadSettingDirect(appSettings, "isCustomEnabled");
+
+                        this.loadSettingDirect(appSettings, "isShowingDrawStats");
+                        this.loadSettingDirect(appSettings, "isShowingLastCycle");
+                        this.loadSettingDirect(appSettings, "isShowingEventStats");
+                        this.loadSettingDirect(appSettings, "isErrorReportingDisabled");
+                        this.loadSettingDirect(appSettings, "shapeColor");
+                        this.loadSettingDirect(appSettings, "canvasColor");
+                        this.loadSettingDirect(appSettings, "isColPickerSorted");
+                        this.loadSettingDirect(appSettings, "showCountsInColPicker");
+                        this.loadSettingDirect(appSettings, "showTypesInColPicker");
+                        this.loadSettingDirect(appSettings, "playbackDuration");
+                        this.loadSettingDirect(appSettings, "isPlaybackLooping");
+
+                        this.loadSettingDirect(appSettings, "rememberLastFile");
+                        this.loadSettingDirect(appSettings, "rememberLastSession");
+                        this.loadSettingDirect(appSettings, "cacheLocalFiles");
+                        this.loadSettingDirect(appSettings, "cacheWebFiles");
+                        this.loadSettingDirect(appSettings, "initialChartType");
+                        this.loadSettingDirect(appSettings, "initialLayout");
+
+                        this.loadSettingDirect(appSettings, "isWheelInertia");
+                        this.loadSettingDirect(appSettings, "isLightingAlwaysOn");
+                        this.loadSettingDirect(appSettings, "ambientLightLevel");
+                        this.loadSettingDirect(appSettings, "isContinuousDrawing");
+                        this.loadSettingDirect(appSettings, "isChartPanelOpen");
+                        this.loadSettingDirect(appSettings, "isInstancingEnabled");
+                        this.loadSettingDirect(appSettings, "showWheelDuringTransformMode");
+
+                        this.loadSettingDirect(appSettings, "drawingPrimitive");
+                        this.loadSettingDirect(appSettings, "isMenuTextVisible");
+                        this.loadSettingDirect(appSettings, "panelOpacity");
+                        this.loadSettingDirect(appSettings, "isMenuIconVisible");
+                        this.loadSettingDirect(appSettings, "isMenuChevronVisible");
+                        this.loadSettingDirect(appSettings, "iconWidth");
+                        this.loadSettingDirect(appSettings, "iconOpacity");
+
+                        this.loadSettingUndef(appSettings, "legendLabelStyle");
+                        this.loadSettingDirect(appSettings, "axisLabelStyle");
+                        this.loadSettingDirect(appSettings, "predefinedCustomChart");
+                        this.loadSettingDirect(appSettings, "isTooltipsEnabled");
+                        this.loadSettingDirect(appSettings, "hoverOnDetailView");
+                        this.loadSettingDirect(appSettings, "hoverOnMouseMove");
+                        this.loadSettingDirect(appSettings, "is3dGridAlwaysOn");
+
+                        this.loadSettingDirect(appSettings, "shapeImage");
+                        this.loadSettingDirect(appSettings, "defaultBins");
+                        this.loadSettingDirect(appSettings, "useNiceNumbers");
+
+                        //---- PARAM loading ----
+                        if (appSettings.hoverParams !== undefined && appSettings.hoverParams != this._hoverParams)
                         {
-
-                            if (appSettings.showDebugStatus !== undefined && appSettings.showDebugStatus !== this._isShowingChartStatus)
-                            {
-                                this.isShowingChartStatus(appSettings.showDebugStatus);
-                            }
-
-                            if (appSettings.showLastCycle !== undefined && appSettings.showLastCycle !== this._isShowingLastCycleStats)
-                            {
-                                this.isShowingLastCycle(appSettings.showLastCycle);
-                            }
-
-                            if (appSettings.showEventStats !== undefined && appSettings.showEventStats !== this._isShowingEventStats)
-                            {
-                                this.isShowingEventStats(appSettings.showEventStats);
-                            }
-
-                            if (appSettings.isErrorReportingDisabled !== undefined && appSettings.isErrorReportingDisabled !== this._isErrorReportingDisabled)
-                            {
-                                this.isErrorReportingDisabled(appSettings.isErrorReportingDisabled);
-                            }
-
-                            if (appSettings.shapeColor !== undefined && appSettings.shapeColor !== this._shapeColor)
-                            {
-                                this.shapeColor(appSettings.shapeColor);
-                            }
-
-                            if (appSettings.canvasColor !== undefined && appSettings.canvasColor !== this._canvasColor)
-                            {
-                                this.canvasColor(appSettings.canvasColor);
-                            }
-
-                            if (appSettings.isColPickerSorted !== undefined && appSettings.isColPickerSorted !== this._isColPickerSorted)
-                            {
-                                this.isColPickerSorted(appSettings.isColPickerSorted);
-                            }
-
-                            if (appSettings.playbackDuration !== undefined && appSettings.playbackDuration !== this._playbackDuration)
-                            {
-                                this.playbackDuration(appSettings.playbackDuration);
-                            }
-
-                            if (appSettings.isPlaybackLooping !== undefined && appSettings.isPlaybackLooping !== this._isPlaybackLooping)
-                            {
-                                this.isPlaybackLooping(appSettings.isPlaybackLooping);
-                            }
-
-                            if (appSettings.rememberLastFile !== undefined && appSettings.rememberLastFile !== this._rememberLastFile)
-                            {
-                                // this.rememberLastFile(appSettings.rememberLastFile);
-                            }
-
-                            if (appSettings.rememberLastSession !== undefined && appSettings.rememberLastSession !== this._rememberLastSession)
-                            {
-                                this.rememberLastSession(appSettings.rememberLastSession);
-                            }
-
-                            if (appSettings.cacheLocalFiles !== undefined && appSettings.cacheLocalFiles !== this._cacheLocalFiles)
-                            {
-                                this.cacheLocalFiles(appSettings.cacheLocalFiles);
-                            }
-
-                            if (appSettings.cacheWebFiles !== undefined && appSettings.cacheWebFiles !== this._cacheWebFiles)
-                            {
-                                this.cacheWebFiles(appSettings.cacheWebFiles);
-                            }
-
-                            if (appSettings.initialChartType !== undefined && appSettings.initialChartType !== this._initialChartType)
-                            {
-                                this.initialChartType(bps.ChartType[appSettings.initialChartType]);
-                            }
-
-                            if (appSettings.initialLayout !== undefined && appSettings.initialLayout !== this._initialLayout)
-                            {
-                                this.initialLayout(bps.Layout[appSettings.initialLayout]);
-                            }
-
-                            if (appSettings.isWheelInertia !== undefined && appSettings.isWheelInertia !== this._isWheelInertia)
-                            {
-                                this.isWheelInertia(appSettings.isWheelInertia);
-                            }
-
-                            if (appSettings.isLightingAlwaysOn !== undefined && appSettings.isLightingAlwaysOn !== this._isLightingAlwaysOn)
-                            {
-                                this.isLightingAlwaysOn(appSettings.isLightingAlwaysOn);
-                            }
-
-                            if (appSettings.ambientLightLevel !== undefined && appSettings.ambientLightLevel !== this._lightingParams.ambientLight.lightFactor)
-                            {
-                                this.ambientLightLevel(appSettings.ambientLightLevel);
-                            }
-
-                            if (appSettings.isContinuousDrawing !== undefined && appSettings.isContinuousDrawing !== this._isContinuousDrawing)
-                            {
-                                this.isContinuousDrawing(appSettings.isContinuousDrawing);
-                            }
-
-                            if (appSettings.showWheelDuringTransformMode !== undefined && appSettings.showWheelDuringTransformMode !== this._showWheelDuringTransformMode)
-                            {
-                                this.showWheelDuringTransformMode(appSettings.showWheelDuringTransformMode);
-                            }
-
-                            if (appSettings.drawingPrimitive !== undefined && appSettings.drawingPrimitive !== this.drawingPrimitive())
-                            {
-                                this.drawingPrimitive(appSettings.drawingPrimitive);
-                            }
-
-                            if (appSettings.isMenuTextVisible !== undefined && appSettings.isMenuTextVisible !== this._isMenuTextVisible)
-                            {
-                                this.isMenuTextVisible(appSettings.isMenuTextVisible);
-                            }
-
-                            if (appSettings.panelOpacity !== undefined && appSettings.panelOpacity !== this._panelOpacity)
-                            {
-                                this.panelOpacity(appSettings.panelOpacity);
-                            }
-
-                            if (appSettings.isMenuIconVisible !== undefined && appSettings.isMenuIconVisible !== this._isMenuIconVisible)
-                            {
-                                this.isMenuIconVisible(appSettings.isMenuIconVisible);
-                            }
-
-                            if (appSettings.isMenuChevronVisible !== undefined && appSettings.isMenuChevronVisible !== this._isMenuChevronVisible)
-                            {
-                                this.isMenuChevronVisible(appSettings.isMenuChevronVisible);
-                            }
-
-                            if (appSettings.isTooltipsEnabled !== undefined && appSettings.isTooltipsEnabled !== this._isTooltipsEnabled)
-                            {
-                                this.isTooltipsEnabled(appSettings.isTooltipsEnabled);
-                            }
-
-                            if (appSettings.is3dGridAlwaysOn !== undefined && appSettings.is3dGridAlwaysOn !== this._is3dGridAlwaysOn)
-                            {
-                                this.is3dGridAlwaysOn(appSettings.is3dGridAlwaysOn);
-                            }
-
-                            if (appSettings.shapeImage !== undefined && appSettings.shapeImage !== this._shapeImage)
-                            {
-                                this.shapeImage(appSettings.shapeImage);
-                            }
-
-                            if (appSettings.defaultBins !== undefined && appSettings.defaultBins !== this._defaultBins)
-                            {
-                                this.defaultBins(appSettings.defaultBins);
-                            }
-
-                            if (appSettings.useNiceNumbers !== undefined && appSettings.useNiceNumbers !== this._useNiceNumbers)
-                            {
-                                this.useNiceNumbers(appSettings.useNiceNumbers);
-                            }
-
-                            if (appSettings.hoverParams !== undefined && appSettings.hoverParams !== this._hoverParams)
-                            {
-                                this._hoverParams = appSettings.hoverParams;
-                                this.onHoverParamsChanged();
-                            }
-
-                            if (appSettings.selectionParams !== undefined && appSettings.selectionParams !== this._selectionParams)
-                            {
-                                this._selectionParams = appSettings.selectionParams;
-                                this.onSelectionParamsChanged();
-                            }
-
-                            if (appSettings.lastFileName)
-                            {
-                                this._initFilename = appSettings.lastFileName;
-                            }
-
-                            if (appSettings.animationData)
-                            {
-                                this._animationData = appSettings.animationData;
-                                this.onAnimationDataChanged();
-                            }
-
-                            if (appSettings.chartFrameData)
-                            {
-                                this._chartFrameData = appSettings.chartFrameData;
-                                this.onChartFrameDataChanged();
-                            }
-
+                            this._hoverParams = appSettings.hoverParams;
+                            this.onHoverParamsChanged();
                         }
+
+                        if (appSettings.selectionParams !== undefined && appSettings.selectionParams != this._selectionParams)
+                        {
+                            this._selectionParams = appSettings.selectionParams;
+                            this.onSelectionParamsChanged();
+                        }
+
+                        if (appSettings.lastFileParams)
+                        {
+                            this._initFileParams = appSettings.lastFileParams;
+                        }
+
+                        if (appSettings.animationData)
+                        {
+                            this._animationData = appSettings.animationData;
+                            this.onAnimationDataChanged();
+                        }
+
+                        if (appSettings.chartFrameData)
+                        {
+                            this._chartFrameData = appSettings.chartFrameData;
+                            this.onChartFrameDataChanged();
+                        }
+
                     }
-                    finally
+                    else
                     {
-                        this._isSavingSettingsDisabled = false;
+                        this.application.deleteLocalStorageInfo();
                     }
                 }
-
+                finally
+                {
+                    this._isSavingSettingsDisabled = false;
+                }
             }
         }
 
@@ -469,8 +586,11 @@ module beachPartyApp
                 return this._shapeImage;
             }
 
-            this._shapeImage = value;
-            this.onShapeImageChanged();
+            if (value != this._shapeImage)
+            {
+                this._shapeImage = value;
+                this.onShapeImageChanged();
+            }
         }
 
         onShapeImageChanged()
@@ -517,7 +637,7 @@ module beachPartyApp
                 this._drawingPrimitive = dpValue;
                 this.saveAppSettings();
 
-                this.application.setAutualDrawingPrimitive();
+                this.application.setActualDrawingPrimitive();
 
                 this.onDataChanged("drawingPrimitive");
             }
@@ -534,6 +654,501 @@ module beachPartyApp
             this._bpsHelper.setContinuousDrawing(value);
 
             this.onDataChanged("isContinuousDrawing");
+            this.saveAppSettings();
+        }
+
+        isChartPanelOpen(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isChartPanelOpen;
+            }
+
+            this._isChartPanelOpen = value;
+
+            this.onDataChanged("isChartPanelOpen");
+            this.saveAppSettings();
+        }
+
+        is3dNavEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._is3dNavEnabled;
+            }
+
+            this._is3dNavEnabled = value;
+            /*/*appClass.instance*/this.application.markIconBarBuildNeeded();
+
+            this.onDataChanged("is3dNavEnabled");
+            this.saveAppSettings();
+        }
+
+        showCountsInColPicker(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._showCountsInColPicker;
+            }
+
+            this._showCountsInColPicker = value;
+
+            this.onDataChanged("showCountsInColPicker");
+            this.saveAppSettings();
+        }
+
+        showTypesInColPicker(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._showTypesInColPicker;
+            }
+
+            this._showTypesInColPicker = value;
+
+            this.onDataChanged("showTypesInColPicker");
+            this.saveAppSettings();
+        }
+
+        mapByColorChannels(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._mapByColorChannels;
+            }
+
+            this._mapByColorChannels = value;
+
+            this.onDataChanged("mapByColorChannels");
+            this.saveAppSettings();
+        }
+
+        isScriptsEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isScriptsEnabled;
+            }
+
+            this._isScriptsEnabled = value;
+            /*appClass.instance*/this.application.markIconBarBuildNeeded();
+
+            this.onDataChanged("isScriptsEnabled");
+            this.saveAppSettings();
+        }
+
+        isUserLoggingEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isUserLoggingEnabled;
+            }
+
+            this._isUserLoggingEnabled = value;
+
+            this.onDataChanged("isUserLoggingEnabled");
+            this.saveAppSettings();
+        }
+
+        isSelectionModeEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isSelectionModeEnabled;
+            }
+
+            this._isSelectionModeEnabled = value;
+            /*appClass.instance*/this.application.markIconBarBuildNeeded();
+
+            this.onDataChanged("isSelectionModeEnabled");
+            this.saveAppSettings();
+        }
+
+        isNewViewEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isNewViewEnabled;
+            }
+
+            this._isNewViewEnabled = value;
+            /*appClass.instance*/this.application.markIconBarBuildNeeded();
+
+            this.onDataChanged("isNewViewEnabled");
+            this.saveAppSettings();
+        }
+
+        isScrubberEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isScrubberEnabled;
+            }
+
+            this._isScrubberEnabled = value;
+            /*appClass.instance*/this.application.markIconBarBuildNeeded();
+
+            this.onDataChanged("isScrubberEnabled");
+            this.saveAppSettings();
+        }
+
+        isClusteringEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isClusteringEnabled;
+            }
+
+            this._isClusteringEnabled = value;
+            /*appClass.instance*/this.application.markIconBarBuildNeeded();
+
+            this.onDataChanged("isClusteringEnabled");
+            this.saveAppSettings();
+        }
+
+        isRedoEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isRedoEnabled;
+            }
+
+            this._isRedoEnabled = value;
+            /*appClass.instance*/this.application.markIconBarBuildNeeded();
+
+            this.onDataChanged("isRedoEnabled");
+            this.saveAppSettings();
+        }
+
+        isDataTipEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isDataTipEnabled;
+            }
+
+            this._isDataTipEnabled = value;
+            /*appClass.instance*/this.application.markIconBarBuildNeeded();
+
+            this.onDataChanged("isDataTipEnabled");
+            this.saveAppSettings();
+        }
+
+        isSlicerEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isSlicerEnabled;
+            }
+
+            this._isSlicerEnabled = value;
+            /*appClass.instance*/this.application.markIconBarBuildNeeded();
+
+            this.onDataChanged("isSlicerEnabled");
+            this.saveAppSettings();
+        }
+
+        isShapeByEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isShapeByEnabled;
+            }
+
+            this._isShapeByEnabled = value;
+            /*appClass.instance*/this.application.markBigBarBuildNeeded();
+
+            this.onDataChanged("isShapeByEnabled");
+            this.saveAppSettings();
+        }
+
+        isSizeByEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isSizeByEnabled;
+            }
+
+            this._isSizeByEnabled = value;
+            /*appClass.instance*/this.application.markBigBarBuildNeeded();
+
+            this.onDataChanged("isSizeByEnabled");
+            this.saveAppSettings();
+        }
+
+        isTextByEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isTextByEnabled;
+            }
+
+            this._isTextByEnabled = value;
+            /*appClass.instance*/this.application.markBigBarBuildNeeded();
+
+            this.onDataChanged("isTextByEnabled");
+            this.saveAppSettings();
+        }
+
+        isLineByEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isLineByEnabled;
+            }
+
+            this._isLineByEnabled = value;
+            /*appClass.instance*/this.application.markBigBarBuildNeeded();
+
+            this.onDataChanged("isLineByEnabled");
+            this.saveAppSettings();
+        }
+
+        isTourEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isTourEnabled;
+            }
+
+            this._isTourEnabled = value;
+            /*appClass.instance*/this.application.markIconBarBuildNeeded();
+
+            this.onDataChanged("isTourEnabled");
+            this.saveAppSettings();
+        }
+
+        runTourOnStartUp(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._runTourOnStartUp;
+            }
+
+            this._runTourOnStartUp = value;
+
+            this.onDataChanged("runTourOnStartUp");
+            this.saveAppSettings();
+        }
+
+        isGridEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isGridEnabled;
+            }
+
+            this._isGridEnabled = value;
+            this.onDataChanged("isGridEnabled");
+            this.saveAppSettings();
+        }
+
+        isColumnEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isColumnEnabled;
+            }
+
+            this._isColumnEnabled = value;
+            this.onDataChanged("isColumnEnabled");
+            this.saveAppSettings();
+        }
+
+        isScatterEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isScatterEnabled;
+            }
+
+            this._isScatterEnabled = value;
+            this.onDataChanged("isScatterEnabled");
+            this.saveAppSettings();
+        }
+
+        isDensityEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isDensityEnabled;
+            }
+
+            this._isDensityEnabled = value;
+            this.onDataChanged("isDensityEnabled");
+            this.saveAppSettings();
+        }
+
+        isStacksEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isStacksEnabled;
+            }
+
+            this._isStacksEnabled = value;
+            this.onDataChanged("isStacksEnabled");
+            this.saveAppSettings();
+        }
+
+        isSquarifyEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isSquarifyEnabled;
+            }
+
+            this._isSquarifyEnabled = value;
+            this.onDataChanged("isSquarifyEnabled");
+            this.saveAppSettings();
+        }
+
+        isRandomEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isRandomEnabled;
+            }
+
+            this._isRandomEnabled = value;
+            this.onDataChanged("isRandomEnabled");
+            this.saveAppSettings();
+        }
+
+
+
+        isPoissonEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isPoissonEnabled;
+            }
+
+            this._isPoissonEnabled = value;
+            this.onDataChanged("isPoissonEnabled");
+            this.saveAppSettings();
+        }
+
+        isSpiralEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isSpiralEnabled;
+            }
+
+            this._isSpiralEnabled = value;
+            this.onDataChanged("isSpiralEnabled");
+            this.saveAppSettings();
+        }
+
+        isLineEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isLineEnabled;
+            }
+
+            this._isLineEnabled = value;
+            this.onDataChanged("isLineEnabled");
+            this.saveAppSettings();
+        }
+
+        isRadialEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isRadialEnabled;
+            }
+
+            this._isRadialEnabled = value;
+            this.onDataChanged("isRadialEnabled");
+            this.saveAppSettings();
+        }
+
+        isXbandEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isXbandEnabled;
+            }
+
+            this._isXbandEnabled = value;
+            this.onDataChanged("isXbandEnabled");
+            this.saveAppSettings();
+        }
+
+        isYbandEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isYbandEnabled;
+            }
+
+            this._isYbandEnabled = value;
+            this.onDataChanged("isYbandEnabled");
+            this.saveAppSettings();
+        }
+
+        isScatter3DEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isScatter3DEnabled;
+            }
+
+            this._isScatter3DEnabled = value;
+            this.onDataChanged("isScatter3DEnabled");
+            this.saveAppSettings();
+        }
+
+        isBarEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isBarEnabled;
+            }
+
+            this._isBarEnabled = value;
+            this.onDataChanged("isBarEnabled");
+            this.saveAppSettings();
+        }
+
+        isViolinEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isViolinEnabled;
+            }
+
+            this._isViolinEnabled = value;
+            this.onDataChanged("isViolinEnabled");
+            this.saveAppSettings();
+        }
+
+        isCustomEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._isCustomEnabled;
+            }
+
+            this._isCustomEnabled = value;
+            this.onDataChanged("isCustomEnabled");
+            this.saveAppSettings();
+        }
+
+
+        isInstancingEnabled(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._instancingParams.isInstancingEnabled;
+            }
+
+            this._instancingParams.isInstancingEnabled = value;
+            this._bpsHelper.setInstancingParams(this._instancingParams);
+
+            this.onDataChanged("IsInstancingEnabled");
             this.saveAppSettings();
         }
 
@@ -698,6 +1313,24 @@ module beachPartyApp
             this.saveAppSettings();
         }
 
+        predefinedCustomChart(value?: string)
+        {
+            if (arguments.length == 0)
+            {
+                return this._predefinedCustomChart;
+            }
+
+            value = AppUtils.capitalizeFirstLetter(value);
+            this._predefinedCustomChart = value;
+
+            if (/*appClass.instance*/this.application._chartIsLoaded)
+            {
+                /*appClass.instance*/this.application.changeToChart(value, "Grid", Gesture.click, null, true);
+            }
+
+            this.onDataChanged("predefinedCustomChart");
+        }
+
         isTooltipsEnabled(value?: boolean)
         {
             if (arguments.length === 0)
@@ -709,6 +1342,32 @@ module beachPartyApp
             this._isTooltipsEnabled = value;
 
             this.onDataChanged("isTooltipsEnabled");
+            this.saveAppSettings();
+        }
+
+        hoverOnDetailView(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._hoverOnDetailView;
+            }
+
+            this._hoverOnDetailView = value;
+
+            this.onDataChanged("hoverOnDetailView");
+            this.saveAppSettings();
+        }
+
+        hoverOnMouseMove(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._hoverOnMouseMove;
+            }
+
+            this._hoverOnMouseMove = value;
+
+            this.onDataChanged("hoverOnMouseMove");
             this.saveAppSettings();
         }
 
@@ -798,7 +1457,7 @@ module beachPartyApp
 
         isMenuTextVisible(value?: boolean)
         {
-            if (arguments.length === 0)
+            if (arguments.length == 0)
             {
                 return this._isMenuTextVisible;
             }
@@ -806,24 +1465,53 @@ module beachPartyApp
             this._isMenuTextVisible = value;
             this.saveAppSettings();
 
-            if (value)
+            this.adjustMenuButtonRules();
+
+            this.onDataChanged("isMenuTextVisible");
+            /*appClass.instance*/this.application.layoutScreen();            // make sure everything lines up after change
+        }
+
+        adjustMenuButtonRules()
+        {
+            var showText = this._isMenuTextVisible;
+            var showChevron = this._isMenuChevronVisible;
+            var showIcon = this._isMenuIconVisible;
+
+            //---- nudge down iconbar 10 pixels when icons are not showing ----
+            vp.select(this.container, ".iconBar").css("margin-top", (showIcon) ? "0px" : "5px");
+
+            if (showText)
             {
-                vp.select(this.container, ".iconBarRow").css("height", "");
-                this._appStyleSheet.addRule(".textOfCombo", "display: block");
+                this._appStyleSheet.addRule(".comboTextRow", (showIcon) ? "display: block" : "display: table-cell");
             }
             else
             {
-                vp.select(this.container, ".iconBarRow");
-                this._appStyleSheet.addRule(".textOfCombo", "display: none");
+                //vp.select("#iconBarRow")
+                this._appStyleSheet.addRule(".comboTextRow", "display: none");
             }
 
-            this.onDataChanged("isMenuTextVisible");
-            this.application.layoutScreen();            // make sure everything lines up after change
+            if (showIcon)
+            {
+                this._appStyleSheet.addRule(".comboIconHolder", "display: block");
+            }
+            else
+            {
+                this._appStyleSheet.addRule(".comboIconHolder", "display: none");
+            }
+
+            if (showChevron)
+            {
+                this._appStyleSheet.addRule(".comboChevron", "display: inline-block");
+            }
+            else
+            {
+                this._appStyleSheet.addRule(".comboChevron", "display: none");
+            }
         }
 
         isMenuIconVisible(value?: boolean)
         {
-            if (arguments.length === 0)
+            if (arguments.length == 0)
             {
                 return this._isMenuIconVisible;
             }
@@ -831,22 +1519,15 @@ module beachPartyApp
             this._isMenuIconVisible = value;
             this.saveAppSettings();
 
-            if (value)
-            {
-                this._appStyleSheet.addRule(".iconOfCombo", "display: inline-block");
-            }
-            else
-            {
-                this._appStyleSheet.addRule(".iconOfCombo", "display: none");
-            }
+            this.adjustMenuButtonRules();
 
             this.onDataChanged("isMenuIconVisible");
-            this.application.layoutScreen();            // make sure everything lines up after change
+            /*appClass.instance*/this.application.layoutScreen();            // make sure everything lines up after change
         }
 
         isMenuChevronVisible(value?: boolean)
         {
-            if (arguments.length === 0)
+            if (arguments.length == 0)
             {
                 return this._isMenuChevronVisible;
             }
@@ -854,16 +1535,80 @@ module beachPartyApp
             this._isMenuChevronVisible = value;
             this.saveAppSettings();
 
-            if (value)
-            {
-                this._appStyleSheet.addRule(".chevronOfCombo", "display: inline-block");
-            }
-            else
-            {
-                this._appStyleSheet.addRule(".chevronOfCombo", "display: none");
-            }
+            this.adjustMenuButtonRules();
 
             this.onDataChanged("isMenuChevronVisible");
+        }
+
+        axisLabelStyle(value?: string)
+        {
+            if (arguments.length == 0)
+            {
+                return this._axisLabelStyle;
+            }
+
+            this._axisLabelStyle = value;
+            this.saveAppSettings();
+
+            //---- need to send this to engine ----
+            //this._appStyleSheet.addRule(".chevronOfCombo", "display: inline-block");
+            //}
+            //else
+            //{
+            //    this._appStyleSheet.addRule(".chevronOfCombo", "display: none");
+            //}
+
+            //---- send this rule to engine so it can apply it to axis labels ----
+            var rule = ".vpxAxisLabel { " + value + "}";
+            this._bpsHelper.addStyleSheet(rule);
+
+            this.onDataChanged("axisLabelStyle");
+        }
+
+        legendLabelStyle(value?: string)
+        {
+            if (arguments.length == 0)
+            {
+                return this._legendLabelStyle;
+            }
+
+            this._legendLabelStyle = value;
+            this.saveAppSettings();
+
+            //---- need to send this to engine ----
+            this._appStyleSheet.addRule(".legendLabel", value);
+            this._appStyleSheet.addRule(".legendTitle", value);
+
+            //---- apply new font to legends ----
+            /*appClass.instance*/this.application.rebuildLegends();
+
+            this.onDataChanged("legendLabelStyle");
+        }
+
+        iconWidth(value?: number)
+        {
+            if (arguments.length === 0)
+            {
+                return this._iconWidth;
+            }
+
+            this._iconWidth = value;
+            this._appStyleSheet.addRule(".comboIcon", "width: " + value + "px");
+
+            this.onDataChanged("iconWidth");
+        }
+
+        iconOpacity(value?: number)
+        {
+            if (arguments.length === 0)
+            {
+                return this._iconOpacity;
+            }
+
+            this._iconOpacity = value;
+            this._appStyleSheet.addRule(".iconOfCombo", "opacity: " + value);
+
+            this.onDataChanged("iconOpacity");
         }
 
         isColPickerSorted(value?: boolean)
@@ -907,14 +1652,16 @@ module beachPartyApp
 
         on3dViewChanged()
         {
-            var chartName = this.application._chartName;
+            var chartName = /*appClass.instance*/this.application._chartName;
 
-            var is3dView = (chartName === "Density" || chartName === "Radial" || chartName === "Violin" ||
-                chartName === "Stacks" || chartName === "Scatter-3D" || chartName === "Scatter");
+            //var isLightingChart =  (chartName == "Density" || chartName == "Radial" || chartName == "Violin" ||
+            //    chartName == "Stacks" || chartName == "Scatter-3D" || chartName == "Scatter");
 
-            var use3DGrid = (chartName === "Stacks" || chartName === "Scatter-3D");
+            var isLightingChart = (chartName === "Stacks" || chartName === "Scatter-3D");
 
-            this._lightingParams.isLightingEnabled = (this._isLightingAlwaysOn || is3dView);
+            var use3DGrid = (chartName == "Stacks" || chartName == "Scatter-3D");
+
+            this._lightingParams.isLightingEnabled = (this._isLightingAlwaysOn || isLightingChart);
             this.onLightingParamsChanged();
 
             this.saveAppSettings();
@@ -984,26 +1731,33 @@ module beachPartyApp
 
         cacheLocalFiles(value?: boolean)
         {
-            if (arguments.length === 0)
+            if (arguments.length == 0)
             {
-                return this._cacheLocalFiles;
+                return this._dataCacheParams.cacheLocalFiles;
             }
 
-            this._cacheLocalFiles = value;
+            this._dataCacheParams.cacheLocalFiles = value;
             this.onDataChanged("cacheLocalFiles");
+            this.onDataCacheChanged();
             this.saveAppSettings();
         }
 
         cacheWebFiles(value?: boolean)
         {
-            if (arguments.length === 0)
+            if (arguments.length == 0)
             {
-                return this._cacheWebFiles;
+                return this._dataCacheParams.cacheWebFiles;
             }
 
-            this._cacheWebFiles = value;
+            this._dataCacheParams.cacheWebFiles = value;
             this.onDataChanged("cacheWebFiles");
+            this.onDataCacheChanged();
             this.saveAppSettings();
+        }
+
+        onDataCacheChanged()
+        {
+            this._bpsHelper.setDataCacheParams(this._dataCacheParams);
         }
 
         useNiceNumbers(value?: boolean)
@@ -1092,9 +1846,11 @@ module beachPartyApp
         {
             if (arguments.length === 0)
             {
+                //---- translate to string ----
                 return bps.ChartType[this._initialChartType];
             }
 
+            //---- translate to enum ----
             this._initialChartType = bps.ChartType[value];
             this.onDataChanged("initialChartType");
             this.saveAppSettings();
@@ -1112,28 +1868,28 @@ module beachPartyApp
             this.saveAppSettings();
         }
 
-        isShowingChartStatus(value?: boolean)
+        isShowingDrawStats(value?: boolean)
         {
             if (arguments.length === 0)
             {
-                return this._isShowingChartStatus;
+                return this._isShowingDrawStats;
             }
 
-            this._isShowingChartStatus = value;
+            this._isShowingDrawStats = value;
             this._bpsHelper.setChartDebugInfo(value);
             this.saveAppSettings();
 
-            this.onDataChanged("isShowingChartStatus");
+            this.onDataChanged("isShowingDrawStats");
         }
 
         isShowingLastCycle(value?: boolean)
         {
             if (arguments.length === 0)
             {
-                return this._isShowingLastCycleStats;
+                return this._isShowingLastCycle;
             }
 
-            this._isShowingLastCycleStats = value;
+            this._isShowingLastCycle = value;
 
             vp.select(this.container, ".lastCycleFPS").css("display", (value) ? "" : "none");
             this.saveAppSettings();
@@ -1228,7 +1984,10 @@ module beachPartyApp
             this.resetAppSettings();
             this.saveAppSettings();
 
-            this.application.loadInitialDataSet();
+            ///*appClass.instance*/this.application.loadInitialDataSet();
+
+            //---- refresh the page ----
+            // location.reload();
         }
 
     }
@@ -1238,31 +1997,47 @@ module beachPartyApp
         //---- to enforce latest default settings and new features, we set the "versionNum" to the build num that created it. ----
         versionNum: string;        
 
-        //---- CHART tab ----
-        shapeColor: string;
-        shapeImage: string;
-        canvasColor: string;
-        drawingPrimitive: string;
-        isColPickerSorted: boolean;
-        isContinuousDrawing: boolean;
-        chartFrameData: bps.ChartFrameData;
+        //---- FEATURES tab ----
+        is3dNavEnabled: boolean;
+        isSelectionModeEnabled: boolean;
+        isNewViewEnabled: boolean;
+        isScrubberEnabled: boolean;
+        isClusteringEnabled: boolean;
+        isRedoEnabled: boolean;
+        isDataTipEnabled: boolean;
+        isSlicerEnabled: boolean;
+        isShapeByEnabled: boolean;
+        isSizeByEnabled: boolean;
+        isTextByEnabled: boolean;
+        isLineByEnabled: boolean;
+        isTourEnabled: boolean;
+        runTourOnStartUp: boolean;
+        mapByColorChannels: boolean;
+        isScriptsEnabled: boolean;
+        isUserLoggingEnabled: boolean;
+
+        //---- CHARTS tab ----
+        isGridEnabled: boolean;
+        isColumnEnabled: boolean;
+        isScatterEnabled: boolean;
+        isDensityEnabled: boolean;
+        isStacksEnabled: boolean;
+        isSquarifyEnabled: boolean;
+
+        isRandomEnabled: boolean;
+        isPoissonEnabled: boolean;
+        isSpiralEnabled: boolean;
+        isLineEnabled: boolean;
+        isRadialEnabled: boolean;
+        isXbandEnabled: boolean;
+        isYbandEnabled: boolean;
+        isScatter3DEnabled: boolean;
+        isBarEnabled: boolean;
+        isViolinEnabled: boolean;
+        isCustomEnabled: boolean;
 
         //---- ANIMATION tab ----
         animationData: bps.AnimationData; 
-
-        //---- HOVER tab ----
-        hoverParams: bps.HoverParams;
-        isTooltipsEnabled: boolean;
-
-        //---- SELECTION tab ----
-        selectionParams: bps.SelectionParams;
-
-        //---- UI tab ----
-        isMenuTextVisible: boolean;
-        isMenuIconVisible: boolean;
-        isMenuChevronVisible: boolean;
-        sortColumnsInPicker: boolean;
-        panelOpacity: number;
 
         //---- 3D tab ----
         is3dGridAlwaysOn: boolean;
@@ -1271,9 +2046,41 @@ module beachPartyApp
         isLightingAlwaysOn: boolean;
         ambientLightLevel: number;
 
+        //---- HOVER tab ----
+        hoverParams: bps.HoverParams;
+        isTooltipsEnabled: boolean;
+        hoverOnDetailView: boolean;
+        hoverOnMouseMove: boolean;
+
+        //---- SELECTION tab ----
+        selectionParams: bps.SelectionParams;
+
+        //---- CHART tab ----
+        shapeColor: string;
+        shapeImage: string;
+        canvasColor: string;
+        drawingPrimitive: string;
+        isColPickerSorted: boolean;
+        isContinuousDrawing: boolean;
+        isChartPanelOpen: boolean;
+        isInstancingEnabled: boolean;
+        chartFrameData: bps.ChartFrameData;
+
+        //---- UI tab ----
+        isMenuTextVisible: boolean;
+        isMenuIconVisible: boolean;
+        iconWidth: number;
+        iconOpacity: number;
+        isMenuChevronVisible: boolean;
+        axisLabelStyle: string;
+        legendLabelStyle;
+        sortColumnsInPicker: boolean;
+        panelOpacity: number;
+        showCountsInColPicker: boolean;
+        showTypesInColPicker: boolean;
+
         //---- DATA tab ----
-        cacheLocalFiles: boolean;
-        cacheWebFiles: boolean;
+        dataCacheParams: bps.DataCacheParams;
         useNiceNumbers: boolean;
         defaultBins: number;
 
@@ -1284,15 +2091,18 @@ module beachPartyApp
         //---- STARTUP tab ----
         rememberLastFile: boolean;
         rememberLastSession: boolean;
-        lastFileName: string;
+        lastFileParams: bps.WorkingDataParams;
         initialChartType: bps.ChartType;
         initialLayout: bps.Layout;
 
         //---- DEBUG tab ----
-        showDebugStatus: boolean;
-        showLastCycle: boolean;
-        showEventStats: boolean;
+        isShowingDrawStats: boolean;
+        isShowingLastCycle: boolean;
+        isShowingEventStats: boolean;
         isErrorReportingDisabled: boolean;
+
+        //---- CHART OPTIONS tab ----
+        predefinedCustomChart: string;
 
         constructor(versionNum: string)
         {

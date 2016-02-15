@@ -70,8 +70,8 @@ module beachParty
         yMaxPeer = false;               // for fillX/fillY: scale Y values relative to max(peer values)
 
         //---- pre-computed random data (for reproducible drawing when attribute changes) ----
-        xRandom: number[] = null;
-        yRandom: number[] = null;
+        xRandom: Float32Array = null;
+        yRandom: Float32Array = null;
 
         //---- for common scaling, among sets of layouts ----
         scaleData: ScaleData;

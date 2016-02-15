@@ -54,10 +54,13 @@ module beachParty
             {
                 var facetCount = facetHelper.facetCount();
 
+                //---- compute min/max over all data for consistent facet binning ----
+                ChartUtils.setFilteredMinMaxBreak(ym, dc.layoutFilterVector, dc.nvData.y);
+
                 for (var i = 0; i < facetCount; i++)
                 {
                     var data = nvFacetBuckets[i];
-                    var results = ChartUtils.computeSumForFacet(dc, data, ym, "y", "x");
+                    var results = ChartUtils.computeSumForFacet(dc, data, ym, "y", "aux");
 
                     this._facetBinResults.push(results.binResults);
                     maxPosSum = Math.max(maxPosSum, results.maxPosSum);
@@ -66,7 +69,7 @@ module beachParty
             }
             else
             {
-                var results = ChartUtils.computeSumForFacet(dc, dc.nvData, ym, "y", "x");
+                var results = ChartUtils.computeSumForFacet(dc, dc.nvData, ym, "y", "aux");
 
                 this._facetBinResults.push(results.binResults);
                 maxPosSum = Math.max(maxPosSum, results.maxPosSum);
@@ -138,7 +141,7 @@ module beachParty
                     }
 
                     //---- calculate the relative width of this item ----
-                    var itemWidth = nv.x.values[vectorIndex];      
+                    var itemWidth = nv.aux.values[vectorIndex];
 
                     itemWidths[vectorIndex] = itemWidth;
 
@@ -258,7 +261,7 @@ module beachParty
             }
         }
 
-        layoutDataForRecord(itemIndex: number, dc: DrawContext)
+        layoutDataForRecord(itemIndex: number, dc: DrawContext, dr: bps.LayoutResult)
         {
             var nv = dc.nvData;
 
@@ -282,25 +285,18 @@ module beachParty
             var trueWidth = Math.abs(widthFactor * this._itemWidths[itemIndex]);
 
             //---- layout as STACKED rectangles ----
-            var x = left + (widthFactor * this._itemLefts[itemIndex]);
-            var y = bottom + this._binHeight / 2;          // place at horizontal center of shape
+            dr.x = left + (widthFactor * this._itemLefts[itemIndex]);
+            dr.y = bottom + this._binHeight / 2;          // place at horizontal center of shape
 
-            x += trueWidth / 2;                        // place at horizontal center of shape
+            dr.x += trueWidth / 2;                        // place at horizontal center of shape
+            dr.z = 0;
 
-            var z = 0;
+            dr.width = inverseSizeFactor * trueWidth;
+            dr.height = inverseSizeFactor * this._binHeight;      
+            dr.depth = dc.defaultDepth2d      // test out 3d cube in a 2d shape
 
-            var width = inverseSizeFactor * trueWidth;
-            var height = inverseSizeFactor * this._binHeight;      
-            var depth = dc.defaultDepth2d;      // test out 3d cube in a 2d shape;
-
-            var colorIndex = this.scaleColData(nv.colorIndex, itemIndex, dc.scales.colorIndex);
-            var imageIndex = this.scaleColData(nv.imageIndex, itemIndex, dc.scales.imageIndex);
-            var opacity = 1;
-
-            return {
-                x: x, y: y, z: z, width: width, height: height, depth: depth, colorIndex: colorIndex, opacity: opacity,
-                imageIndex: imageIndex, theta: 0,
-            };
+            dr.colorIndex = this.scaleColData(nv.colorIndex, itemIndex, dc.scales.colorIndex);
+            dr.imageIndex = this.scaleColData(nv.imageIndex, itemIndex, dc.scales.imageIndex);
        }
     }
 }

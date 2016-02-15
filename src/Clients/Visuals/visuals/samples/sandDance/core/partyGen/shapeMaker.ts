@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    shapeMaker.ts - generates shapes for containers.
 //-------------------------------------------------------------------------------------
 
@@ -434,7 +434,7 @@ module beachParty
                         //----  convert from string to func ----
                         var foo = null;
                         /* tslint:disable */
-                        eval("foo = " + cm.customScalingCallback);
+                        // eval("foo = " + cm.customScalingCallback);
                         /* tslint:enable */
 
                         var customScale: any = {};
@@ -447,7 +447,7 @@ module beachParty
                 }
                 else
                 {
-                    var result = utils.getMinMax(nvColorIndex, null);       //  nv.layoutFilter);
+                    var result = utils.getMinMax(nvColorIndex, null, cm);       //  nv.layoutFilter);
 
                     if (cm.spread === bps.MappingSpread.low)
                     {

@@ -68,10 +68,12 @@ module beachPartyApp
         onKeyDown(e)
         {
             //---- TODO: add 3D nav keys here ----
-            if (e.keyCode === vp.events.keyCodes.escape)
+            if (e.keyCode == vp.events.keyCodes.escape)
             {
                 //---- why does animatin get turned off here? ----
                 this._bpsHelper.resetTransform();
+
+                /*appClass.instance*/this.application.resetDataZoomMode();
             }
         }
 
@@ -103,27 +105,33 @@ module beachPartyApp
                         //---- REMOVE dataTip ----
                         this.dataTipMgr.closeDataTip(dataTip);
                     }
-                    else
-                    {
-                        //---- ADD dataTip ----
-                        var colName = vp.select(this.container, ".searchCol").text();
-                        var pt = vp.events.mousePosition(e);
+                    //else
+                    //{
+                    //    //---- ADD dataTip ----
+                    //    var colName = vp.select("#searchCol").text();
+                    //    var pt = vp.events.mousePosition(e);
 
-                        this.dataTipMgr.addDataTip(colName, pt);
+                    //    dataTipMgrClass.instance.addDataTip(colName, pt);
 
-                        vp.events.cancelEventBubble(e);
-                        vp.events.cancelEventDefault(e);
-                    }
+                    //    vp.events.cancelEventBubble(e);
+                    //    vp.events.cancelEventDefault(e);
+                    //}
                 }
             });
         }
 
         onUxMouseMove(e, callback?: any)
         {
+            /// NOTE: hover information (the current hover shape) is used for both tooltips & the 
+            /// hover rending effect (2 separate app options).
+
             if (true)       // !this._delayTimer)         // throttle mouse events
             {
                 var hoverEnabled = (this.settings.hoverEffect() !== "none");
-                if (hoverEnabled && e.buttons !== 1)            // not left button
+                var tooltipsEnabled = /*appSettingsMgr.instance*/this.settings.isTooltipsEnabled();
+                var hoverOnMoveEnabled = /*appSettingsMgr.instance*/this.settings.hoverOnMouseMove();
+
+                if (hoverEnabled && (tooltipsEnabled || hoverOnMoveEnabled) && e.buttons != 1)            // not left button
                 {
                     var mousePos = vp.events.mousePosition(e, this._chartUxElem);
 
@@ -131,7 +139,9 @@ module beachPartyApp
                     var getRecord = (e.buttons !== 0 || this.settings.isTooltipsEnabled());
                     var scale = sandDance.commonUtils.getScale(this.container);
 
-                    this._bpsHelper.applyHover(mousePos.x / scale.x, mousePos.y / scale.y, getRecord, null, (msgBlock) =>
+                    var colList = /*appClass.instance*/this.application._tooltipColumns;
+
+                    this._bpsHelper.applyHover(mousePos.x / scale.x, mousePos.y / scale.y, getRecord, colList, hoverOnMoveEnabled, (msgBlock) =>
                     {
                         if (this._hoverPrimaryKey !== msgBlock.primaryKey)
                         {
@@ -176,34 +186,58 @@ module beachPartyApp
             return this._hoverPrimaryKey;
         }
 
+//         buildRubberBand1()
+//         {
+//             var chartUxElem: HTMLElement = $(".chartUxDiv", this.container).get(0);
+//             this._rubberBandSelector = new RubberBandSelectorClass(this.container, chartUxElem);
+// 
+//             //---- hook the RECT SELECT event ----
+//             this._rubberBandSelector.attachOnSelect((evt, rcBand, toggle, mouseDownOrigin) =>
+//             {
+//                 if (rcBand)
+//                 {
+//                     let scale = sandDance.commonUtils.getScale(this.container);
+// 
+//                     //---- adjust rcBand so that it is relative to "myChart" ----
+//                     var rc = vp.select(this.container, ".myChart").getBounds(false);
+// 
+//                     var rcBandAdj = vp.geom.createRect(
+//                         (rcBand.left - rc.left) / scale.x,
+//                         (rcBand.top - rc.top) / scale.y,
+//                         rcBand.width / scale.x,
+//                         rcBand.height / scale.y);
+// 
+//                     var sd = new SelectionDesc();
+//                     sd.legendSource = "rect drag";
+//                     sd.rectSelect = rcBandAdj;
+// 
+//                     this.application.setSelectionDesc(sd);
+//                     this._bpsHelper.rectSelect(rcBandAdj);
+//                 }
+//             });
+// 
+//             this._rubberBandSelector.registerForChange("mouseDown", (e) =>
+//             {
+//                 //---- mouse vs touch issue: turn off last tooltip info, or it shows wherever user touches screen (if cursor is over a shape) ----
+//                 //this._view.hideToolTip();
+// 
+//                 this.enableEngineUI(false);
+//             });
+// 
+//             this._rubberBandSelector.isEnabled(true);
+// 
+//         }
+
         buildRubberBand()
         {
+            // var chartUxElem = document.getElementById("chartUxDiv");
             var chartUxElem: HTMLElement = $(".chartUxDiv", this.container).get(0);
             this._rubberBandSelector = new RubberBandSelectorClass(this.container, chartUxElem);
 
             //---- hook the RECT SELECT event ----
             this._rubberBandSelector.attachOnSelect((evt, rcBand, toggle, mouseDownOrigin) =>
             {
-                if (rcBand)
-                {
-                    let scale = sandDance.commonUtils.getScale(this.container);
-
-                    //---- adjust rcBand so that it is relative to "myChart" ----
-                    var rc = vp.select(this.container, ".myChart").getBounds(false);
-
-                    var rcBandAdj = vp.geom.createRect(
-                        (rcBand.left - rc.left) / scale.x,
-                        (rcBand.top - rc.top) / scale.y,
-                        rcBand.width / scale.x,
-                        rcBand.height / scale.y);
-
-                    var sd = new SelectionDesc();
-                    sd.legendSource = "rect drag";
-                    sd.rectSelect = rcBandAdj;
-
-                    this.application.setSelectionDesc(sd);
-                    this._bpsHelper.rectSelect(rcBandAdj);
-                }
+                this.onRubberBandSelect(evt, rcBand, toggle, mouseDownOrigin);
             });
 
             this._rubberBandSelector.registerForChange("mouseDown", (e) =>
@@ -211,11 +245,68 @@ module beachPartyApp
                 //---- mouse vs touch issue: turn off last tooltip info, or it shows wherever user touches screen (if cursor is over a shape) ----
                 //this._view.hideToolTip();
 
+                this._rubberBandSelector.forceToggle(/*appClass.instance*/this.application.isDataZoomMode());
+
                 this.enableEngineUI(false);
             });
 
             this._rubberBandSelector.isEnabled(true);
 
+        }
+
+        onRubberBandSelect(evt, rcBand, toggle, mouseDownOrigin)
+        {
+            //---- for now: "toggle" is set when we drag a rectangle with RIGHT mouse button down ----
+            if (rcBand)
+            {
+                let scale = sandDance.commonUtils.getScale(this.container);
+
+                //---- adjust rcBand so that it is relative to "myChart" ----
+                // var rc = vp.select("#myChart").getBounds(false);
+                var rc = vp.select(this.container, ".myChart").getBounds(false);
+                // var rcBandAdj = vp.geom.createRect(rcBand.left - rc.left, rcBand.top - rc.top, rcBand.width, rcBand.height);
+
+                var rcBandAdj = vp.geom.createRect(
+                        (rcBand.left - rc.left) / scale.x,
+                        (rcBand.top - rc.top) / scale.y,
+                        rcBand.width / scale.x,
+                        rcBand.height / scale.y);
+
+                if (/*appClass.instance*/this.application.dragAction() == "zoomIn")
+                {
+                    toggle = true;
+                }
+
+                if (toggle || /*appClass.instance*/this.application._isDataZoomMode)
+                {
+                    var zoomIt = true;
+
+                    if (!/*appClass.instance*/this.application._isDataZoomMode)
+                    {
+                        //---- watch out for accidental use of right click vs. right drag ----
+                        zoomIt = (Math.max(rcBand.width, rcBand.height) > 4);
+                    }
+
+                    if (zoomIt)
+                    {
+                        this._bpsHelper.dataZoom(rcBandAdj, false);
+
+                        //if (toggle)
+                        //{
+                        //    appClass.instance.isDataZoomMode(true);
+                        //}
+                    }
+                }
+                else
+                {
+                    var sd = new SelectionDesc();
+                    sd.legendSource = "rect drag";
+                    sd.rectSelect = rc;
+
+                    /*appClass.instance*/this.application.setSelectionDesc(sd);
+                    this._bpsHelper.rectSelect(rcBandAdj);
+                }
+            }
         }
 
         showToolTipForShape(primaryKey: string, record: any)
@@ -231,29 +322,37 @@ module beachPartyApp
                     keys.sort();
 
                     var maxCols = Math.min(keys.length, this._maxToolTipColumns);
+                    var includeNames = /*appClass.instance*/this.application._includeNameInTooltips;
+                    var firstSystemName = true;
 
                     for (var i = 0; i < maxCols; i++)
                     {
                         var key = keys[i];
                         var value = record[key];
-                        var colType = this.application.getColType(key);
+                        var colType = /*appClass.instance*/this.application.getColType(key);
 
                         value = vp.formatters.formatByType(value, colType);
 
-                        if (!key.startsWith("_"))
+                        if (key.startsWith("_") && firstSystemName)
                         {
-                            if (ttMsg !== "")
-                            {
-                                ttMsg += "\r\n";
-                            }
+                            firstSystemName = false;
+                            ttMsg += "\r\n\r\n";
+                        }
+                        else if (i > 0)
+                        {
+                            ttMsg += "\r\n";
+                        }
 
-                            ttMsg += key + "=" + value;
+                        if (includeNames)
+                        {
+                            ttMsg += key + ":\t" + value;
+                        }
+                        else
+                        {
+                            ttMsg += value;
                         }
                     }
-
-                    ttMsg += "\r\n\r\nprimaryKey=" + record[beachParty.primaryKeyName];
                 }
-
             }
 
             //---- set tooltip on our div ----

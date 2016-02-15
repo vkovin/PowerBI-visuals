@@ -7,25 +7,28 @@
 
 module beachPartyApp
 {
-    export class DataTipClass extends beachParty.DataChangerClass implements IAppControl
+    export class DataTipClass extends BaseAppControlClass
     {
         private dataTipMgr: DataTipMgrClass;
         private application: AppClass;
         private container: HTMLElement;
         private settings: AppSettingsMgr;
 
-        _root: HTMLDivElement;
         _img: HTMLImageElement;
         _text: HTMLDivElement;
 
+        //---- datatip PARAMS ----
+        _title: string;
+        _columnNames: string[]          // if bound to 1 or more columns
+        _includeNames: boolean;         // if "name: " should be prefixed to each column value
+
         _bpsHelper: bps.ChartHostHelperClass;
         _dataTipOffset = null;          // where mouse/pointer clicked on the datatip
-        _columnName: string;            // if bound to a column
         _primaryKey: string;            // if bound to a specific record
         _plotBounds: any;
         _ptMouseDown: any;              // screen coordinates of mouse when we clicked on tooltip
         _isRealDrag = false;            // true if datatip has been dragged more than just accidental movement during a click
-        _dataTipPanel: DataTipPanelClass;
+        //_dataTipPanel: DataTipPanelClass;
 
         constructor(dataTipMgr: DataTipMgrClass, application: AppClass, settings: AppSettingsMgr, container: HTMLElement, parentElem: HTMLElement, bpsHelper: bps.ChartHostHelperClass)
         {
@@ -52,7 +55,8 @@ module beachPartyApp
             var imgW = rootW.append("div")
                 .addClass("dataTipDragger")
                 .addClass("fnDragDataTip")
-                .css("width", "20px");
+                .css("width", "20px")
+                .css("z-index", "999");
 
             imgW.element()
                 .addEventListener("mousedown", (e) => this.onMouseDown(e));
@@ -62,7 +66,11 @@ module beachPartyApp
                 .addClass("dataTipText")
                 .css("position", "relative")
                 .css("bottom", "40px")                  // a space of about 20 pixels between text & img
-                .css("left", "-1px");
+                .css("left", "-1px")
+                .attach("mousedown", (e) =>
+                {
+                    //TODO: remove it.
+                });
 
             this._root = rootW[0];
             this._img = imgW[0];
@@ -76,7 +84,7 @@ module beachPartyApp
         {
             var items =
                 [
-                    new MenuItemData("Properties", "Open the properties panel for this data tip"),
+                    //new MenuItemData("Properties", "Open the properties panel for this data tip"),
                     new MenuItemData("Delete", "Delete this data tip"),
                 ];
 
@@ -88,18 +96,18 @@ module beachPartyApp
                 {
                     this.dataTipMgr.closeDataTip(this);
                 }
-                else if (name === "Properties")
-                {
-                    this._dataTipPanel = new DataTipPanelClass(this.application, this.settings, this.container, this);
-
-                    var rc = vp.select(this._img).getBounds(false);
-                    this._dataTipPanel.show(rc.right, rc.bottom);
-                }
+//                 else if (name === "Properties")
+//                 {
+//                     this._dataTipPanel = new DataTipPanelClass(this.application, this.settings, this.container, this);
+// 
+//                     var rc = vp.select(this._img).getBounds(false);
+//                     this._dataTipPanel.show(rc.right, rc.bottom);
+//                 }
 
             }, true);
 
             var pt = vp.events.mousePosition(e);
-            pm.show(pt.x, pt.y);
+            pm.showAt(pt.x, pt.y);
         }
 
         onMouseDown(e)
@@ -141,7 +149,9 @@ module beachPartyApp
             var rc = vp.select(this._root).getBounds(true);
             dtd.offset = { left: rc.left, top: rc.top };
 
-            dtd.colName = this._columnName;
+            dtd.title = this._title;
+            dtd.colNames = this._columnNames;
+            dtd.includeNames = this._includeNames;
 
             return dtd;
         }
@@ -153,13 +163,15 @@ module beachPartyApp
             //---- and in case the record binding fails ----
             vp.select(this._root)
                 .css("left", dtd.offset.left + "px")
-                .css("top", dtd.offset.top + "px");
+                .css("top", dtd.offset.top + "px")
 
              vp.select(this._text)
-                .text(dtd.text);
+                .text(dtd.text)
 
-            this._primaryKey = dtd.primaryKey;
-            this._columnName = dtd.colName;
+             this._primaryKey = dtd.primaryKey;
+             this._title = dtd.title;
+            this._columnNames = dtd.colNames;
+            this._includeNames = dtd.includeNames;
 
             if (dtd.primaryKey !== null && dtd.primaryKey !== undefined)
             {
@@ -167,9 +179,12 @@ module beachPartyApp
             }
         }
 
-        setColumnName(value: string)
+        setParams(title: string, colNames: string[], includeNames: boolean)
         {
-            this._columnName = value;
+            this._title = title;
+            this._columnNames = colNames;
+            this._includeNames = includeNames;
+
             this.updateTextAndOffset();
         }
 
@@ -181,7 +196,7 @@ module beachPartyApp
 
         updateTextAndOffset(primaryKey?: string)
         {
-            var requestedColumnNames = [this._columnName];
+            var requestedColumnNames = this._columnNames;
 
             if (primaryKey !== undefined)
             {
@@ -256,10 +271,22 @@ module beachPartyApp
         buildTextFromColumnValues(colNames: string[], colValues: string[])
         {
             var html = "";
+            var colCount = (colValues) ? colValues.length : 0;
 
-            if (colValues)
+            if (this._title && this._title != "")
             {
-                for (var i = 0; i < colValues.length; i++)
+                var cls = (colCount > 0) ? "datatipTitle" : "datatipText";
+
+                html += "<div class='" + cls + "'>" + this._title + "</div>";
+            }
+
+            html += "<table class='datatipTable'>";
+
+            if (colCount > 0)
+            {
+                var firstSystemName = true;
+
+                for (var i = 0; i < colCount; i++)
                 {
                     var colName = colNames[i];
                     var colType = this.application.getColType(colName);
@@ -267,24 +294,40 @@ module beachPartyApp
                     var value = colValues[i];
                     var strValue = vp.formatters.formatByType(value, colType);
 
-                    html += strValue + "<br />";
-                }
-            }
+                    if (i > 0)
+                    {
+                        if (colName.startsWith("_") && firstSystemName)
+                        {
+                            //---- skip a row ----
+                            firstSystemName = false;
+                            html += "<tr><td>&nbsp;</td></tr>";
+                        }
+                    }
 
-            if (html === "")
-            {
-                html = "&nbsp;&nbsp;";
+                    html += "<tr style='white-space: nowrap'>";
+
+                    if (this._includeNames)
+                    {
+                        html += "<td class='dataTipName'>" + colName + ":</td>";
+                    }
+
+                    html += "<td class='datatipValue'>" + value + "</td></tr>";
+
+                    //html += strValue + "<br />";
+                }
+
+                html += "</table>";
             }
 
             //---- set text / HTML ----
-            var textW = vp.select(this._text);
+            var textW = vp.select(this._text)
 
-                textW.html(html);
+            textW.html(html);
 
-                ////---- position bottom of text 40 pixels above img ----
-                //var rc = textW.getBounds(false);
-                //textW
-                //    .css("top", -(rc.height + 40) + "px")
+            //---- position bottom of text 20 pixels above img ----
+            var rc = textW.getBounds(false);
+            textW
+                .css("top", -(rc.height + 20) + "px")
         }
 
         startDrag(e, offset)
@@ -369,17 +412,6 @@ module beachPartyApp
                 this.close();
             }
 
-        }
-
-        getRootElem()
-        {
-            return this._root;
-        }
-
-        close()
-        {
-            vp.select(this._root)
-                .remove();
         }
     }
 }

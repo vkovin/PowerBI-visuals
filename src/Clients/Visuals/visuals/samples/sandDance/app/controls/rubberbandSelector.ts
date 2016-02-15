@@ -1,5 +1,5 @@
 ﻿///-----------------------------------------------------------------------------------------------------------------
-/// rubberBandSelector.ts.  Copyright (c) 2015 Microsoft Corporation.
+/// rubberBandSelector.ts.  Copyright (c) 2016 Microsoft Corporation.
 /// Part of the beachParty library
 ///-----------------------------------------------------------------------------------------------------------------
 
@@ -20,6 +20,7 @@ module beachPartyApp
     export class RubberBandSelectorClass extends beachParty.DataChangerClass
     {
         private container: HTMLElement;
+        private myChartElement: vp.dom.IWrapperOuter;
 
         //---- state ----
         _id = nextSelectorId++;
@@ -37,12 +38,11 @@ module beachPartyApp
         _isLeftButtonDown = false;
         _isRightButtonDown = false;
         _pendingUpEvent = false;
+        _forceToggle = false;
 
         _onMouseMoveFunc = null;
         _onMouseUpFunc = null;
         _isSetCaptureActive = false;
-
-        private myChartElement: vp.dom.IWrapperOuter;
 
         //---- turn this off until we change this to look like a context menu on touch screen, with normal menu items ----
         _isHoldEnabled = false;
@@ -52,6 +52,8 @@ module beachPartyApp
             super();
 
             this.container = container;
+
+            this.myChartElement = vp.select(this.container, ".myChart");
 
             this._onMouseMoveFunc = (e) => this.onRubberMove(e);
             this._onMouseUpFunc = (e) => this.onRubberUp(e);
@@ -71,9 +73,18 @@ module beachPartyApp
             rubberBand.css("pointer-events", "none");
             rubberBand[0].disabled = true;
 
-            this.myChartElement = vp.select(this.container, ".myChart");
-
             this.hookEvents(false);
+        }
+
+        forceToggle(value?: boolean)
+        {
+            if (arguments.length == 0)
+            {
+                return this._forceToggle;
+            }
+
+            this._forceToggle = value;
+            this.onDataChanged("forceToggle");
         }
 
         isDragging()
@@ -180,7 +191,7 @@ module beachPartyApp
             if (this._isSetCaptureActive)
             {
                 vp.events.releaseCaptureWindow();
-                vp.utils.debug("rubberBandSelection: RELEASE CAPTURE");
+                //vp.utils.debug("rubberBandSelection: RELEASE CAPTURE");
 
                 this._isSetCaptureActive = false;
             }
@@ -188,13 +199,13 @@ module beachPartyApp
 
         clearBanding()
         {
-            vp.utils.debug("cancelBanding: id=" + this._id);
+            //vp.utils.debug("cancelBanding: id=" + this._id);
             this._isBanding = false;
         }
 
         isToggleKey(evt)
         {
-            return (evt.ctrlKey);
+            return (evt.shiftKey);          // (evt.ctrlKey);
         }
 
         /// debug support: distingish between mouse and touch UP events.
@@ -234,7 +245,7 @@ module beachPartyApp
         /// debug support: distingish between mouse and touch UP events.
         onMouseUp(evt)
         {
-            vp.utils.debug("rubberBandSelector: onMouseUp");
+            //vp.utils.debug("rubberBandSelector: onMouseUp");
 
             //---- in case things get out of sync, always treat UP event as clearing isRightButtonDown ----
             if (true)       // evt.which == 3)
@@ -263,7 +274,7 @@ module beachPartyApp
         {
             if (this._pendingUpEvent)
             {
-                vp.utils.debug("rubberbandSelection: cancelling pending UP event");
+                //vp.utils.debug("rubberbandSelection: cancelling pending UP event");
                 this._pendingUpEvent = false;
 
                 this.cancelBanding(true);
@@ -287,7 +298,7 @@ module beachPartyApp
 
         onRubberUpCore(evt)
         {
-            vp.utils.debug("rubberBandSelector.onRubberUpCore: id=" + this._id + ", isBanding=" + this._isBanding);
+            //vp.utils.debug("rubberBandSelector.onRubberUpCore: id=" + this._id + ", isBanding=" + this._isBanding);
 
             this.clearCapture();
 
@@ -313,7 +324,7 @@ module beachPartyApp
                         //this.cancelBanding(false, evt);
                         this.showRubberBand(false);
 
-                        var toggle = this.isToggleKey(evt);
+                        var toggle = (this._forceToggle || evt.which == 3 || this.isToggleKey(evt));
 
                         if (evt.type === "touchend")
                         {
@@ -326,12 +337,15 @@ module beachPartyApp
 
                         var rcBand = vp.geom.rectFromPoints(ptCurrent, this._ptMouseDown);
 
-                        // vp.utils.debug("rcBand: width=" + rcBand.width + ", height=" + rcBand.height);
+                        //---- adjust rcBand so it matches actual location ----
+                        // var rect = this._dragSelectCanvas.getBoundingClientRect();
+
+                        vp.utils.debug("rcBand: width=" + rcBand.width + ", height=" + rcBand.height + ", toggle=" + toggle);
 
                         //---- allow for a direct click (no movement) ----
                         if (true)   //(rcBand.width > 3) && (rcBand.height > 3))
                         {
-                            vp.utils.debug("calling selectCallback from RUBBER BAND...");
+                            //vp.utils.debug("calling selectCallback from RUBBER BAND...");
 
                             if (this._selectCallback)
                             {
@@ -584,6 +598,10 @@ module beachPartyApp
             }
 
             this.onDataChanged("mouseDown");
+
+            //---- set line style according to which button is pressed ----
+            var toggle = (this._forceToggle || evt.which == 3);
+            /*vp.select("#rubberBandSelector")*/this._rubberBand.css("border", (toggle) ? "3px double white" : "2px dashed yellow");
         }
 
         clearHoldTimer()
@@ -647,8 +665,8 @@ module beachPartyApp
 
     }
 
-    export function createRubberBandSelector(canvas: HTMLElement): RubberBandSelectorClass
+    export function createRubberBandSelector(container: HTMLElement, canvas: HTMLElement): RubberBandSelectorClass
     {
-        return new RubberBandSelectorClass(this.container, canvas);
+        return new RubberBandSelectorClass(container, canvas);
     }
 } 

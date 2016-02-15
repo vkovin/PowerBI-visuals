@@ -227,7 +227,7 @@ void main()
     //gl_FragColor = .00001*gl_FragColor + vec4(1, 0, 0, 1);  
 }`;
 
-    shaders["../shaders/pointCube/pointVertex"] = `//-------------------------------------------------------------------------------------
+shaders["../shaders/pointCube/pointVertex"] = `//-------------------------------------------------------------------------------------
 //  Copyright (c) 2015 - Microsoft Corporation.
 //    pointVertex.c - an GLSL vertex shader for drawing cubes using the POINT primitive in BeachParty.
 //-------------------------------------------------------------------------------------
@@ -422,18 +422,20 @@ const vec3 dirLight = vec3(0, 0, 1);			// z=+1 point to negative z, where shapes
 //const vec3 crLight2 = vec3(1.0, 1.0, 1.0);
 //const vec3 dirLight2 = vec3(0, -1, 0);			// from above 
 
-//---- constants ----
+//---- constants: set just once ----
 uniform vec3 cubeVertices[24];
 uniform vec3 cubeNormals[24];
 uniform vec2 cubeTexCoords[24];
-uniform mat4 projectionMatrix;
 uniform float cubeTriangles[36];
+uniform mat4 projectionMatrix;
 
-//---- set on every draw ----
+//---- constants: set on every draw ----
 uniform vec3 colorPalette[28];
 uniform vec3 colorPalette2[28];
 uniform float isColorDiscrete;
 uniform float isColorDiscrete2;
+uniform float isColorDirect;
+uniform float isColorDirect2;
 uniform float maxColors;
 uniform float maxColors2;
 
@@ -464,16 +466,24 @@ attribute vec3 xyz;
 attribute vec3 xyz2;
 attribute vec3 size;
 attribute vec3 size2;
+attribute float theta;
+attribute float theta2;
+
+//---- attribute buffers that expand bytes into floats ----
 attribute float colorIndex;
 attribute float colorIndex2;
 attribute float imageIndex;
 attribute float imageIndex2;
-attribute float opacity;
-attribute float opacity2;
-attribute float theta;
-attribute float theta2;
-attribute float vectorIndex;
 attribute float vertexId;
+
+//---- opacity mapping currently not supported ----
+//attribute float opacity;
+//attribute float opacity2;
+
+attribute vec3 rgbBuff;
+attribute vec3 rgbBuff2;
+
+attribute float vectorIndex;
 attribute float staggerOffset;
 
 //---- output to fragment shader ----
@@ -486,16 +496,33 @@ varying highp vec2 v_texCoord2;
 
 void main()
 {
-	int ci = int(clamp(colorIndex, 0.0, maxColors));
-	int ci2 = int(clamp(colorIndex2, 0.0, maxColors2));
-
 	//---- stagger movement & color changes ----
 	float toPercentStag = clamp(toPercent + staggerOffset, 0.0, 1.0);
 	float toPercenUneasedStag = clamp(toPercentUneased + staggerOffset, 0.0, 1.0);
 
 	//---- DISCRETE/CONTINUOUS COLOR PALETTE ----
-	vec3 color = (isColorDiscrete == 1.0) ? (colorPalette[ci]) : (mix(colorPalette[ci], colorPalette[ci + 1], colorIndex - float(ci)));
-	vec3 color2 = (isColorDiscrete2 == 1.0) ? (colorPalette2[ci2]) : (mix(colorPalette2[ci2], colorPalette2[ci2 + 1], colorIndex2 - float(ci2)));
+    vec3 color;
+    vec3 color2;
+
+    if (isColorDirect == 1.0)
+    {
+        color = rgbBuff;
+    }
+    else
+    {
+        int ci = int(clamp(colorIndex, 0.0, maxColors));
+        color = (isColorDiscrete == 1.0) ? (colorPalette[ci]) : (mix(colorPalette[ci], colorPalette[ci + 1], colorIndex - float(ci)));
+    }
+
+    if (isColorDirect2 == 1.0)
+    {
+        color2 = rgbBuff2;
+    }
+    else
+    {
+        int ci2 = int(clamp(colorIndex2, 0.0, maxColors2));
+        color2 = (isColorDiscrete2 == 1.0) ? (colorPalette2[ci2]) : (mix(colorPalette2[ci2], colorPalette2[ci2 + 1], colorIndex2 - float(ci2)));
+    }
 	vec3 colorMixed = mix(color, color2, toPercenUneasedStag);
 
     //---- set VERTEX ID ----
@@ -562,7 +589,8 @@ void main()
 	}
 
 	//---- opacity ----
-	v_opacity = mix(opacity*globalOpacity, opacity2*globalOpacity2, toPercenUneasedStag);
+    //v_opacity = mix(opacity*globalOpacity, opacity2*globalOpacity2, toPercenUneasedStag);
+    v_opacity = mix(globalOpacity, globalOpacity2, toPercenUneasedStag);
 
 	//---- pass values to fragment shader ----
 	//gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1);
@@ -573,8 +601,7 @@ void main()
 	//---- this sets the size of POINT drawing primitives -----
 	gl_PointSize = szMixed.x;
 
-}
-`;
+}`;
 
     shaders["../shaders/fragmentShader.c"] = `//-------------------------------------------------------------------------------------
 //  Copyright (c) 2015 - Microsoft Corporation.

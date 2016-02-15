@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    barCount.ts - builds a sand Bar chart (unit histogram, where units are arranged in a grid within each column).
 //-------------------------------------------------------------------------------------
 
@@ -54,6 +54,9 @@ module beachParty
             if (facetHelper)
             {
                 var facetCount = facetHelper.facetCount();
+
+                //---- compute min/max over all data for consistent facet binning ----
+                ChartUtils.setFilteredMinMaxBreak(ym, dc.layoutFilterVector, dc.nvData.y);
 
                 for (var i = 0; i < facetCount; i++)
                 {
@@ -210,7 +213,7 @@ module beachParty
             var binTops: number[] = [];
             var binWidths: number[] = [];
 
-            var bottom = dc.y + this._yMargin;;        // dc.y - height + this._yMargin;
+            var bottom = dc.y + this._yMargin;        // dc.y - height + this._yMargin;
             for (var i = 0; i < binsY.length; i++)
             {
                 binTops[i] = bottom;
@@ -289,7 +292,7 @@ module beachParty
             this._yBetween = result.yBetween;
         }
 
-        layoutDataForRecord(recordIndex: number, dc: DrawContext)
+        layoutDataForRecord(recordIndex: number, dc: DrawContext, dr: bps.LayoutResult)
         {
             var nv = dc.nvData;
 
@@ -306,15 +309,16 @@ module beachParty
             var binIndexX = this._rowToBinNum[recordIndex];
 
             var top = this._binTops[binIndexX];
+            // var bottom = dc.y;     // dc.y - dc.height;
             var binWidth = this._binWidths[binIndexX];
 
-            if (this._chartOptions.layout === "Random")
+            if (this._chartOptions.layout == "Random")
             {
                 var xr = nv.randomX.values[recordIndex];
                 var yr = nv.randomY.values[recordIndex];
 
-                var x = dc.x + xr * binWidth;
-                var y = top + yr * this._itemHeight;
+                dr.x = dc.x + xr * binWidth;
+                dr.y = top + yr * this._itemHeight;
             }
             else 
             {
@@ -325,27 +329,21 @@ module beachParty
                 var colNum = Math.floor(indexInBin / this._shapesPerCol);
 
                 //---- center shapes within their x-locations ----
-                var x = dc.x + ((.5 + colNum) / this._newColCount) * this._itemWidth; 
+                dr.x = dc.x + ((.5 + colNum) / this._newColCount) * this._itemWidth; 
 
                 //---- center shapes relative to their row bottom ----
-                var y = top + ((.5 + rowNum) / this._shapesPerCol) * this._itemHeight;
+                dr.y = top + ((.5 + rowNum) / this._shapesPerCol) * this._itemHeight;
             }
 
             var scaleFactor = this.scaleColData(nv.size, recordIndex, dc.scales.size, 1);
-            var width = this._maxShapeSize * scaleFactor;
-            var height = width;
+            dr.width = this._maxShapeSize * scaleFactor;
+            dr.height = dr.width;
 
-            var z = 0;
-            var depth = dc.defaultDepth2d     ;
+            dr.z = 0;
+            dr.depth = dc.defaultDepth2d;
 
-            var colorIndex = this.scaleColData(nv.colorIndex, recordIndex, dc.scales.colorIndex);
-            var imageIndex = this.scaleColData(nv.imageIndex, recordIndex, dc.scales.imageIndex);
-            var opacity = 1;
-
-            return { 
-                x: x, y: y, z: z, width: width, height: height, depth: depth, colorIndex: colorIndex, opacity: opacity,
-                imageIndex: imageIndex, theta: 0,
-            };
+            dr.colorIndex = this.scaleColData(nv.colorIndex, recordIndex, dc.scales.colorIndex);
+            dr.imageIndex = this.scaleColData(nv.imageIndex, recordIndex, dc.scales.imageIndex);
         }
     }
 

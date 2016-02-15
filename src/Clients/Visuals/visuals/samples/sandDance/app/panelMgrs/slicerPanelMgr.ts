@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    slicerControl.ts - control to filter records based on a histogram of a column.
 //-------------------------------------------------------------------------------------
 
@@ -7,12 +7,12 @@
 
 module beachPartyApp
 {
-    export class SlicerControlClass extends beachParty.DataChangerClass implements IAppControl
+    /** we are a control created by jsonPanelClass.  we are hosted in a panel. */
+    export class SlicerControlClass extends BaseAppControlClass
     {
         private container: HTMLElement;
         private application: AppClass;
 
-        _root: HTMLDivElement;
         //_colPickerName: HTMLElement;
         _histogram: HTMLElement;
         _histoHolder: HTMLElement;
@@ -30,7 +30,7 @@ module beachPartyApp
         _minValue = null;
         _searchParams: utils.SearchParamsEx;
 
-        _panel: JsonPanelClass;
+        //_panel: jsonPanelClass;
         _selectedBinIndex = null;
         _holderHeight: number;
         _rowElements = [];
@@ -44,14 +44,16 @@ module beachPartyApp
             this.application = application;
             this.container = container;
 
-            this._panel = panel;
+            //this._panel = panel;
             var root = document.createElement("div");
             this._root = root;
+
+            //panel.applyAppPanelOpacity();
 
             //---- build slicer control ----
             vp.select(root)
                 //.css("border", "1px solid green")
-                .addClass("slicerControl");
+                .addClass("slicerControl")
 
             var rootW = vp.select(root);
 
@@ -62,14 +64,14 @@ module beachPartyApp
                 .addClass("histogramHolder")
                 .css("overflow-y", "auto")
                 .css("overflow-x", "hidden")
-                .css("padding-right", "20px")    ;
+                .css("padding-right", "20px")    
 
             this._histoHolder = histoHolderW[0];
 
             //---- add slider root, for when we a hold numeric column ----
             var sliderW = histoHolderW.append("span")
                 .addClass("slicerSlider")
-                .css("position", "relative");
+                .css("position", "relative")
 
             this._slider = sliderW[0];
 
@@ -92,12 +94,12 @@ module beachPartyApp
 
         tagDelimiter(value?: bps.TagDelimiter)
         {
-            if (arguments.length === 0)
+            if (arguments.length == 0)
             {
                 return this._tagDelimiter;
             }
 
-            if (value !== this._tagDelimiter)
+            if (value != this._tagDelimiter)
             {
                 this._tagDelimiter = value;
                 this.onDataChanged("tagDelimiter");
@@ -111,15 +113,12 @@ module beachPartyApp
             var barW = rootW.append("div")
                 .addClass("slicerControlBar")
                 .css("position", "relative")
-                .css("top", "-4px");
-
-            var leftButtonContainer = barW
-                .append("div")
-                .addClass("leftButtonContainer");
+                .css("top", "0px")
+                .css("margin-bottom", "8px")
 
             //---- add column picker ----
-            var colPickerValues = this.application.getMappingCols(false);
-            var colPicker = new PickerClass(this.application, this.container, leftButtonContainer[0], null, colPickerValues, "None", "Select a column for populating data slicer bars", true,
+            var colPickerValues = /*appClass.instance*/this.application.getMappingCols(false);
+            var colPicker = new PickerClass(this.application, this.container, barW[0], null, colPickerValues, "None", "Select a column for populating data slicer bars", true,
                 20);
 
             this._colPicker = colPicker;
@@ -131,16 +130,12 @@ module beachPartyApp
                 this.colName(itemText);
             });
 
-            var rightButtonContainer = barW
-                .append("div")
-                .addClass("rightButtonContainer");
-
             //---- add TAG DELIMITER picker ----
             var tdValues = PickerClass.buildStringsFromEnum(bps.TagDelimiter);
-            var tdPicker = new PickerClass(this.application, this.container, rightButtonContainer[0], "Tag:", tdValues, "None", "For TAG columns, specify the tag delimiter", true);
+            var tdPicker = new PickerClass(this.application, this.container, barW[0], "Tag:", tdValues, "None", "For TAG columns, specify the tag delimiter", true);
 
             this._delimiterPicker = tdPicker;
-            // vp.select(tdPicker.getRoot()).css("float", "right");
+            vp.select(tdPicker.getRoot()).css("float", "right")
 
             tdPicker.registerForChange("value", (e) =>
             {
@@ -152,14 +147,14 @@ module beachPartyApp
 
         refreshColPickList()
         {
-            var colPickerValues = this.application.getMappingCols(false);
+            var colPickerValues = /*appClass.instance*/this.application.getMappingCols(false);
             this._colPicker.values(colPickerValues);
         }
 
         /** property for setting the selected value in the UI when the control is loaded with data. */
         selectedValue(value?: string)
         {
-            if (arguments.length === 0)
+            if (arguments.length == 0)
             {
                 return this._minValue;
             }
@@ -167,7 +162,7 @@ module beachPartyApp
             this._minValue = value;
 
             //---- need to update the selected row ----
-            if ((this._binResult) && (this._binResult.colName === this._colName) && (this._rowElements.length))
+            if ((this._binResult) && (this._binResult.colName == this._colName) && (this._rowElements.length))
             {
                 this.setSelectedBinIndexFromValue(value);
             }
@@ -195,7 +190,7 @@ module beachPartyApp
 
                 if (this._isCategory)
                 {
-                    if (bin.name === value)
+                    if (bin.name == value)
                     {
                         this.updateSelectedRow(this._rowElements[i]);
                         break;
@@ -242,7 +237,7 @@ module beachPartyApp
 
             //---- quick layout ----
             vp.select(this._histoHolder)
-                .css("height", hh + "px");
+                .css("height", hh + "px")
 
             this._holderHeight = hh;
 
@@ -252,12 +247,12 @@ module beachPartyApp
         close()
         {
             vp.select(this._root)
-                .remove();
+                .remove()
         }
 
         slicerData(value?: beachParty.BinResult)
         {
-            if (arguments.length === 0)
+            if (arguments.length == 0)
             {
                 return this._binResult;
             }
@@ -273,19 +268,19 @@ module beachPartyApp
 
         colName(value?: string)
         {
-            if (arguments.length === 0)
+            if (arguments.length == 0)
             {
                 return this._colName;
             }
 
-            if (this._colName !== value)
+            if (this._colName != value)
             {
                 this._colName = value;
                 this._selectedBinIndex = null;
                 this.markBuildNeeded();
 
                 //---- reset delimiter when column changes ----
-                if (this._tagDelimiter !== bps.TagDelimiter.none)
+                if (this._tagDelimiter != bps.TagDelimiter.none)
                 {
                     this.tagDelimiter(bps.TagDelimiter.none);
                 }
@@ -304,38 +299,38 @@ module beachPartyApp
             var sliderBoxW = vp.select(this._slider)
                 .css("height", this._holderHeight + "px")
                 .css("width", "30px")
-                .css("background", "green");
+                .css("background", "green")
 
             var lineHeight = this._holderHeight - 8;
 
-            sliderBoxW.append("span")
+            var minLineW = sliderBoxW.append("span")
                 .css("width", "1px")
                 .css("height", lineHeight + "px")
                 .css("background", "red")
                 .css("margin-left", "8px")
-                .css("margin-right", "12px");
+                .css("margin-right", "12px")
 
-            sliderBoxW.append("span")
+            var maxLineW = sliderBoxW.append("span")
                 .css("width", "1px")
                 .css("height", lineHeight + "Px")
                 .css("background", "red")
-                .css("margin-right", "8px");
+                .css("margin-right", "8px")
 
-            sliderBoxW.append("span")
+            var minNibW = sliderBoxW.append("span")
                 .css("width", "7px")
                 .css("height", "7px")
                 .css("background", "green")
                 .css("position", "absolute")
                 .css("left", "5px")
-                .css("top", "5px");
+                .css("top", "5px")
 
-            sliderBoxW.append("span")
+            var maxNibW = sliderBoxW.append("span")
                 .css("width", "7px")
                 .css("height", "7px")
                 .css("background", "green")
                 .css("position", "absolute")
                 .css("left", "16px")
-                .css("top", "5px");
+                .css("top", "5px")
         }
 
         getMaxCount(result: beachParty.BinResult)
@@ -369,21 +364,26 @@ module beachPartyApp
             }
 
             var histogramW = vp.select(this._histogram)
-                .clear();
+                .clear()
 
             var binResult = this._binResult;
             if (binResult && binResult.bins.length)
             {
                 var binCount = binResult.bins.length;
                 var maxCount = this.getMaxCount(binResult);
+
+                var height = vp.select(this._root).height();
                 var barHeight = 16;     // approx text height of binName
 
                 var width = vp.select(this._root).width();
-                if (width === 0)
+                if (width == 0)
                 {
                     //---- default width for panels whose size is still floating ----
                     width = 300;
                 }
+
+                var maxBarWidth = width / 2;
+                var barWidthFactor = maxBarWidth / maxCount;
 
                 for (var c = 0; c < binCount; c++)
                 {
@@ -393,11 +393,12 @@ module beachPartyApp
                     var minWidth = 10;       // all bars are at least this wide (10%) (so they are clickable)
 
                     var barWidth = minWidth + count / maxCount * 90;
+                    var binValue: any = binName;
 
                     var rowW = histogramW.append("tr")
-                        .addClass("histogramRow");
+                        .addClass("histogramRow")
 
-                    if (c === this._selectedBinIndex)
+                    if (c == this._selectedBinIndex)
                     {
                         rowW.css("background", "#444");
                     }
@@ -406,29 +407,29 @@ module beachPartyApp
                         rowW.css("background", "none");
                     }
 
-                    var displayName = (binName === "") ? this.application._blankValueStr : binName;
+                    var displayName = (binName == "") ? /*appClass.instance*/this.application._blankValueStr : binName;
 
                     //---- bin NAME td ----
-                    rowW.append("td")
+                    var binNameW = rowW.append("td")
                         .addClass("histogramBinName")
                         .css("width", "1px")                    // make name col as small as possible
                         .css("white-space", "nowrap")
                         .text(displayName)
-                        .attach("click", (e) => this.selectFromRow(e.target.parentElement));
+                        .attach("click", (e) => this.selectFromRow(e.target.parentElement))
 
                     //---- bin BAR td ----
                     var tdW = rowW.append("td")
-                        .css("min-width", "60px");
+                        .css("min-width", "60px")
 
                     //---- actual bar must be in a separate div ----
-                    tdW.append("div")
+                    var valueElemW = tdW.append("div")
                         .addClass("histogramBinBar")
                         .css("height", barHeight + "px")
                         .css("width", barWidth + "%")
                         .title(vp.formatters.comma(count) + " records")
-                        .attach("click", (e) => this.selectFromRow(e.target.parentElement.parentElement));
+                        .attach("click", (e) => this.selectFromRow(e.target.parentElement.parentElement))
 
-                    utils.prepWithBinDirect(rowW[0], this._colName, isCategory, bin, "histoBar");
+                    //utils.prepWithBinDirect(rowW[0], this._colName, isCategory, bin, "histoBar");
                    
                     this._rowElements.push(rowW[0]);
                 }
@@ -469,8 +470,10 @@ module beachPartyApp
         }
     }
 
-    export function createSlicer(panel: JsonPanelClass, application: AppClass, container: HTMLElement)
+    export function createSlicer(application: AppClass, container: HTMLElement, panel?: JsonPanelClass)
     {
         return new SlicerControlClass(application, container, panel);
     }
+
 }
+

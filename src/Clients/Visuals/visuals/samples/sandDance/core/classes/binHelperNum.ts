@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    binHelperNum.ts - divides up numeric data into bins.
 //-------------------------------------------------------------------------------------
 
@@ -10,7 +10,7 @@ module beachParty
     export class BinHelperNum
     {
         /// returns an array of {min, max, count, density} bin objects for the specified data and binsize.
-        public static createBins(nv: NamedVectors, colName: string, binCount: number, addIndexes?: boolean,
+        public static createNumBins(nv: NamedVectors, colName: string, binCount: number, addIndexes?: boolean,
             returnBinAssignments?: boolean, formatter?: any, useNiceNumbers?: boolean, md?: bps.MappingData,
             binSortOptions?: BinSortOptionsClass): BinResultNum
         {
@@ -25,7 +25,7 @@ module beachParty
             var recommendedDateFormatString = undefined;
 
             var numColData = nv[colName];
-            var colData = numColData.values;
+            var colData = <number[]> numColData.values;
 
             var sumColData = null;
             if (binSortOptions && binSortOptions.sumByColumn)
@@ -72,6 +72,7 @@ module beachParty
                     }
                 }
 
+                //---- Note: min() and max() skip NaN values by default ----
                 var dataMin = filteredData.min();
                 var dataMax = filteredData.max();
 
@@ -82,16 +83,24 @@ module beachParty
                     dataMax = dataMin + 1;          // make 2 values so that we can honor requested number of buckets
                 }
 
-                if (typeName === "number")
+                if (typeName == "number")
                 {
                     if (md.minBreak !== undefined && md.minBreak < dataMin)
                     {
                         dataMin = md.minBreak;
                     }
+                    else if (md.minBreakFacet !== undefined && md.minBreakFacet < dataMin)
+                    {
+                        dataMin = md.minBreakFacet;
+                    }
 
                     if (md.maxBreak !== undefined && md.maxBreak > dataMax)
                     {
                         dataMax = md.maxBreak;
+                    }
+                    if (md.maxBreakFacet !== undefined && md.maxBreakFacet > dataMax)
+                    {
+                        dataMax = md.maxBreakFacet;
                     }
                 }
 
@@ -120,6 +129,15 @@ module beachParty
                 var isDescending = (dataMin > dataMax);
 
                 var numDecimals = vp.data.calcNumDecimals(dataMax, dataMin, binCount);
+                var firstNumIndex = 0;
+
+                var nanCount = filteredData.count((d) => isNaN(d));
+                if (nanCount > 0)
+                {
+                    binCount++;
+                    firstNumIndex++;
+                    var nanBinIndex = 0;
+                }
 
                 if (!formatter)
                 {
@@ -140,20 +158,27 @@ module beachParty
                 {
                     for (var i = 0; i < md.breaks.length - 1; i++)
                     {
-                        var minValue = <number>md.breaks[i];
-                        var maxValue = <number>md.breaks[i + 1];
-
-                        var bin = new BinInfoNum("", minValue, maxValue);
-
-                        var thisSize = bin.max - bin.min;
-
-                        if (i === 0)
+                        if (i === nanBinIndex)
                         {
-                            binSize = thisSize;
+                            var bin = new BinInfoNum("", NaN, NaN);
                         }
-                        else if (thisSize !== binSize)
+                        else
                         {
-                            fixedSizedBuckets = false;
+                            var minValue = <number>md.breaks[i];
+                            var maxValue = <number>md.breaks[i + 1];
+
+                            var bin = new BinInfoNum("", minValue, maxValue);
+
+                            var thisSize = bin.max - bin.min;
+
+                            if (i == 0)
+                            {
+                                binSize = thisSize;
+                            }
+                            else if (thisSize != binSize)
+                            {
+                                fixedSizedBuckets = false;
+                            }
                         }
 
                         if (addIndexes)
@@ -161,9 +186,14 @@ module beachParty
                             bin.rowIndexes = [];
                         }
 
-                        bin.isFirst = (i === 0);
+                        //bin.isFirst = (i == 0);
 
                         bins.push(bin);
+                    }
+
+                    if (bin)
+                    {
+                        bin.isLast = true;
                     }
 
                     if (typeName === "date")
@@ -177,7 +207,7 @@ module beachParty
                         }
                     }
                 }
-                else if (typeName === "date")
+                else if (typeName == "date")
                 {
                     //---- TODO: figure out best units to use here ----
                     //---- for now, we use HOURS or multiples thereof ----
@@ -193,6 +223,11 @@ module beachParty
 
                     var binCount = steps.length - 1;
                     binSize = undefined;
+
+                    if (nanCount > 0)
+                    {
+                        binCount++;
+                    }
 
                     //var dtMin = new Date(dataMin);
                     //var dtMax = new Date(dataMax);
@@ -212,14 +247,22 @@ module beachParty
                         //dtStart.setHours(hour);
                         //dtEnd.setHours(hour + 1);
 
-                        var minValue = steps[i];
-                        var maxValue = steps[i + 1];
-
-                        var bin = new BinInfoNum("", minValue, maxValue);
-
-                        if (binSize === undefined || binSize === null)
+                        if (i === nanBinIndex)
                         {
-                            binSize = bin.max - bin.min;
+                            var bin = new BinInfoNum("", NaN, NaN);
+                        }
+                        else
+                        {
+
+                            var minValue = steps[i];
+                            var maxValue = steps[i + 1];
+
+                            var bin = new BinInfoNum("", minValue, maxValue);
+
+                            if (binSize === undefined)
+                            {
+                                binSize = bin.max - bin.min;
+                            }
                         }
 
                         if (addIndexes)
@@ -227,9 +270,14 @@ module beachParty
                             bin.rowIndexes = [];
                         }
 
-                        bin.isFirst = (i === 0);
+                        //bin.isFirst = (i == 0);
 
                         bins.push(bin);
+                    }
+
+                    if (bin)
+                    {
+                        bin.isLast = true;
                     }
                 }
                 else
@@ -237,27 +285,40 @@ module beachParty
                     //---- number ----
                     for (var i = 0; i < binCount; i++)
                     {
-                        var binStart = dataMin + (i * binSize);
-
-                        if (isDescending)
+                        if (i === nanBinIndex)
                         {
-                            var binEnd = Math.max(dataMax, binStart + binSize);
+                            var bin = new BinInfoNum("", NaN, NaN);
                         }
                         else
                         {
-                            var binEnd = Math.min(dataMax, binStart + binSize);
-                        }
+                            var iNum = (nanCount > 0) ? i - 1 : i;
+                            var binStart = dataMin + (iNum * binSize);
 
-                        var bin = new BinInfoNum("", binStart, binEnd);
+                            if (isDescending)
+                            {
+                                var binEnd = Math.max(dataMax, binStart + binSize);
+                            }
+                            else
+                            {
+                                var binEnd = Math.min(dataMax, binStart + binSize);
+                            }
+
+                            var bin = new BinInfoNum("", binStart, binEnd);
+                        }
 
                         if (addIndexes)
                         {
                             bin.rowIndexes = [];
                         }
 
-                        bin.isFirst = (i === 0);
+                        //bin.isFirst = (i == 0);
 
                         bins.push(bin);
+                    }
+
+                    if (bin)
+                    {
+                        bin.isLast = true;
                     }
 
                     // Make sure that the maximum value is always included as the last bin boundary [because
@@ -267,7 +328,7 @@ module beachParty
                 }
 
                 //---- step 2: fill bins ----
-                var firstBinMin = bins[0].min;
+                var firstBinMin = dataMin;      //   bins[firstNumIndex].min;
 
                 for (var i = 0; i < colData.length; i++)
                 {
@@ -280,57 +341,58 @@ module beachParty
                         var value = colData[i];
                         if (isNaN(value))
                         {
-                            //---- convert NAN values to 0, so their bin locations are well defined ----
-                            value = 0;
-                        }
-
-                        //---- find "fltIndex" ----
-                        if (fixedSizedBuckets && binSize)
-                        {
-                            var fltIndex = (value - firstBinMin) / binSize;
+                            binIndex = nanBinIndex;
                         }
                         else
                         {
-                            for (var j = 0; j < bins.length; j++)
+                            //---- find "fltIndex" ----
+                            if (fixedSizedBuckets && binSize)
                             {
-                                var bin = bins[j];
-                                if (value <= bin.max || j === (bins.length-1))
+                                var fltIndex = firstNumIndex + (value - firstBinMin) / binSize;
+                            }
+                            else
+                            {
+                                for (var j = 0; j < bins.length; j++)
                                 {
-                                    fltIndex = j;
-                                    break;
+                                    var bin = bins[j];
+                                    if (value < bin.max || j == (bins.length - 1))
+                                    {
+                                        fltIndex = j;
+                                        break;
+                                    }
                                 }
                             }
-                        }
 
-                        //var binIndex = Math.max(0, Math.floor(fltIndex - hostServices.epsilon));
+                            //var binIndex = Math.max(0, Math.floor(fltIndex - hostServices.epsilon));
 
-                        /*
-                        // RichardH: Commented out 2/4/2014: With this code in place, the bin index will sometimes disagree with the bin.min/max values
-                        // [eg. in DemoVote, a MedianHomeValue of 200,000 (with 15 columns) will be placed into bin index 3 (200,000.2 to 266,666.93) instead of bin index 2].
-                        var binIndex = Math.max(0, Math.floor(fltIndex + hostServices.epsilon));
-                        binIndex = Math.min(binIndex, binCount - 1);
-                        */
+                            /*
+                            // RichardH: Commented out 2/4/2014: With this code in place, the bin index will sometimes disagree with the bin.min/max values
+                            // [eg. in DemoVote, a MedianHomeValue of 200,000 (with 15 columns) will be placed into bin index 3 (200,000.2 to 266,666.93) instead of bin index 2].
+                            var binIndex = Math.max(0, Math.floor(fltIndex + hostServices.epsilon));
+                            binIndex = Math.min(binIndex, binCount - 1);
+                            */
 
-                        binIndex = Math.min(Math.floor(fltIndex), binCount - 1);
+                            binIndex = Math.min(Math.floor(fltIndex), binCount - 1);
 
-                        // If we have, for example, 3 columns: "0 .. 10", "> 10 .. 20", "> 20 .. 30" then we need to
-                        // ensure that the value 10 falls into bin[0] (not bin 1) and 20 falls into bin[1] (not bin 2).
-                        // Note that we need to do 2 checks for the BEFORE bin case:
-                        // Is the value <= the max of the bin before, or is the value equal to the min of the current bin?
-                        // We need both since 'max of the bin before' and 'min of the current bin' may NOT be the same value
-                        // due to float imprecision. See this in action with the titanic dataset and 15 columns on 'Age':
-                        // bins[5].max = 31.999999999999996 yet bins[6].min = 32. 
-                        // This happens because:
-                        // (5 * binSize) + binSize = 31.999999999999996, but 6 * binSize = 32.
+                            // If we have, for example, 3 columns: "0 .. 10", "> 10 .. 20", "> 20 .. 30" then we need to
+                            // ensure that the value 10 falls into bin[0] (not bin 1) and 20 falls into bin[1] (not bin 2).
+                            // Note that we need to do 2 checks for the BEFORE bin case:
+                            // Is the value <= the max of the bin before, or is the value equal to the min of the current bin?
+                            // We need both since 'max of the bin before' and 'min of the current bin' may NOT be the same value
+                            // due to float imprecision. See this in action with the titanic dataset and 15 columns on 'Age':
+                            // bins[5].max = 31.999999999999996 yet bins[6].min = 32. 
+                            // This happens because:
+                            // (5 * binSize) + binSize = 31.999999999999996, but 6 * binSize = 32.
 
-                        //---- enforce bin min/max settings for edge cases ----
-                        if ((binIndex > 0) && (value <= bins[binIndex].min))
-                        {
-                            binIndex--;
-                        }
-                        else if ((binIndex < bins.length - 1) && (value > bins[binIndex].max))
-                        {
-                            binIndex++;
+                            //---- enforce bin min/max settings for edge cases ----
+                            if ((binIndex > firstNumIndex) && (value < bins[binIndex].min))
+                            {
+                                binIndex--;
+                            }
+                            else if ((binIndex < bins.length - 1) && (value >= bins[binIndex].max))
+                            {
+                                binIndex++;
+                            }
                         }
 
                         //---- update BIN STATS (only for filtered-IN shapes) ----
@@ -373,7 +435,7 @@ module beachParty
 
                 this.computeBinStats(bins, itemCount);
 
-                if (usingLocalFormatter && typeName === "number")
+                if (usingLocalFormatter && typeName == "number")
                 {
                     //---- ensure that label decimal precision is true to the bin's content ----
                     for (var i = 0; i < 5; i++)             // maximum of 5 times / extra decimals
@@ -405,7 +467,8 @@ module beachParty
                         var maxLabel = <string>formatter(bin.max);
                     }
 
-                    bin.name = ((i === 0) ? "" : "> ") + minLabel + " ... " + maxLabel;
+                    //bin.name = ((i == 0) ? "" : "> ") + minLabel + " ... " + maxLabel;
+                    bin.name = minLabel + " ... " + maxLabel;
 
                     bin.minLabel = minLabel;
                     bin.maxLabel = maxLabel;

@@ -32,14 +32,20 @@
 
 /// <reference path="classes/appMgr.ts" />
 
+/// <reference path="classes/searchUtils.ts" />
 /// <reference path="classes/chartFrameHelper.ts" /> 
 /// <reference path="classes/cmdMgr.ts" />
 /// <reference path="classes/csvScanner.ts" />
+/// <reference path="classes/csvColLoader.ts" />
 /// <reference path="classes/csv.ts" /> 
 /// <reference path="classes/dampener.ts" /> 
 /// <reference path="classes/dataFrame.ts" />
 /// <reference path="classes/boundBoxMgr.ts" />
 /// <reference path="classes/dataMgr.ts" />
+
+/// <reference path="classes/localStorageMgr.ts" />
+
+/// <reference path="classes/bufferMgr.ts" />
 
 /// <reference path="chartTypes/baseGlVis.ts" /> 
 /// <reference path="chartTypes/chartUtils.ts" />
@@ -63,7 +69,12 @@
 /// <reference path="chartTypes/partyGenPlot.ts" />
 /// <reference path="chartTypes/scatterPlot.ts" />
 /// <reference path="chartTypes/stacksBin.ts" />
+/// <reference path="chartTypes/trueCustom.ts" />
+/// <reference path="chartTypes/xBand.ts" />
+/// <reference path="chartTypes/yBand.ts" />
 
+/// <reference path="classes/drawHtml.ts" />
+/// <reference path="classes/drawSvg.ts" />
 /// <reference path="classes/dataView.ts" /> 
 /// <reference path="classes/facetHelper.ts" />
 /// <reference path="classes/fileAccess.ts" />

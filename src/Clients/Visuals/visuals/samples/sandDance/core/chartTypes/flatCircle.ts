@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    flatCircle.ts - builds a phylogenic circle layout of sand shapes.
 //-------------------------------------------------------------------------------------
 
@@ -9,7 +9,7 @@ module beachParty
 {
     export class FlatCircle extends BaseGlVisClass
     {
-        _phyloSeed = 137.508;           // "golden angle"
+        //_phyloSeed = 137.508;           // "golden angle"
         _maxCount = 0;
         _radius = 0;
         _spacing = 0;
@@ -49,10 +49,12 @@ module beachParty
             this._maxShapeSize = ChartUtils.getScatterShapeSize(dc, this._maxCountOverFacets, this._view);
         }
 
-        layoutDataForRecord(i: number, dc: DrawContext)
+        
+        layoutDataForRecord(i: number, dc: DrawContext, dr: bps.LayoutResult)
         {
             var nv = dc.nvData;
-
+            
+            var sp = this._view.spiralParams();
             var filtered = (dc.layoutFilterVector && dc.layoutFilterVector[i]);
             var rowIndex = 0;
 
@@ -66,23 +68,18 @@ module beachParty
             var cy = this._center.y;
 
             var r = this._spacing * Math.sqrt(rowIndex);
-            var theta = Math.PI / 180 * (rowIndex * this._phyloSeed); 
-            var x = cx + r * Math.sin(theta);
-            var y = cy + r * Math.cos(theta);
-            var z = 0;      
+            var theta = Math.PI / 180 * (rowIndex * sp.seed);
 
-            var width = this._maxShapeSize * this.scaleColData(nv.size, i, dc.scales.size, 1);
-            var height = width;
-            var depth = dc.defaultDepth2d;      // test out 3d cube in a 2d shape;
+            dr.x = cx + r * Math.sin(theta);
+            dr.y = cy + r * Math.cos(theta);
+            dr.z = 0;      
 
-            var colorIndex = this.scaleColData(nv.colorIndex, i, dc.scales.colorIndex);
-            var imageIndex = this.scaleColData(nv.imageIndex, i, dc.scales.imageIndex);
-            var opacity = 1;
+            dr.width = this._maxShapeSize * this.scaleColData(nv.size, i, dc.scales.size, 1);
+            dr.height = dr.width;
+            dr.depth = dc.defaultDepth2d      // test out 3d cube in a 2d shape
 
-            return {
-                x: x, y: y, z: z, width: width, height: height, depth: depth, colorIndex: colorIndex, opacity: opacity,
-                imageIndex: imageIndex, theta: 0,
-            };
+            dr.colorIndex = this.scaleColData(nv.colorIndex, i, dc.scales.colorIndex);
+            dr.imageIndex = this.scaleColData(nv.imageIndex, i, dc.scales.imageIndex);
         }
     }
 }

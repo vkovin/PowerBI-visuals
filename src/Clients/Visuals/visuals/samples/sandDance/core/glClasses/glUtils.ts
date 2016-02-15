@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    glUtils.ts - webGL utility functions.
 //-------------------------------------------------------------------------------------
 
@@ -35,6 +35,25 @@ module glUtils
         }
 
         return gl;
+    }
+
+    export function getExtension(gl: any, name: string)
+    {
+        var glExt = null;
+        var prefixes = ["", "WEBKIT_", "MOZ_"];
+
+        for (var i = 0; i < prefixes.length; i++)
+        {
+            var prefix = prefixes[i];
+
+            glExt = gl.getExtension(prefix + name);
+            if (glExt)
+            {
+                break;
+            }
+        }
+
+        return glExt;
     }
 
     export function findAndCompileShader(gl: any, shaderId: string, isVertexShader: boolean)
@@ -87,9 +106,12 @@ module glUtils
         return program;
     }
 
-    export function addAttribute(attributeMap: any, gl, program, nameInShader: string, sizeInFloats: number)
+    export function addAttribute(attributeMap: any, gl, glInst, program, nameInShader: string, sizeInFloats: number,
+        isByte?: boolean, normalizeOnGpu?: boolean, isVertexCommon?: boolean, isSingleBuffer?: boolean)
     {
-        var attr = new GlAttributeClass(gl, program, nameInShader, sizeInFloats);
+        var attr = new GlAttributeClass(gl, glInst, program, nameInShader, sizeInFloats, isByte, normalizeOnGpu,
+            isVertexCommon, isSingleBuffer);
+
         attributeMap[nameInShader] = attr;
 
         return attr;

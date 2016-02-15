@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    stacksBins.ts - builds a stacked (in Z) 2D histogram, wheere each stack in a set of NxN substacks.
 //-------------------------------------------------------------------------------------
 
@@ -45,8 +45,13 @@ module beachParty
         {
             super("stacksBinClass", view, gl, chartState, container, appMgr);
 
+            var transformMgr = this._view.getTransformMgr();
+
             //---- initially rotate about X axis 45 degrees for perspective view ----
-            this._view.getTransformMgr().rotateMatrixX(Math.PI / 4.0, false, false);
+            transformMgr.rotateMatrixX(Math.PI / 4.0, false, false);
+
+            //---- zoom camera out a bit so we can see full bounding box ----
+            transformMgr.scaleCameraRelative(1 / 1.3, { x: 0, y: 0 });
         }
 
         /** Adjust scales as needed for our chart. */
@@ -62,6 +67,10 @@ module beachParty
             if (facetHelper)
             {
                 var facetCount = facetHelper.facetCount();
+
+                //---- compute min/max over all data for CONSISTENT facet binning ----
+                ChartUtils.setFilteredMinMaxBreak(xm, dc.layoutFilterVector, dc.nvData.x);
+                ChartUtils.setFilteredMinMaxBreak(ym, dc.layoutFilterVector, dc.nvData.y);
 
                 for (var i = 0; i < facetCount; i++)
                 {
@@ -263,7 +272,7 @@ module beachParty
             this.assignRecordsToBins(nv, xResult, yResult, dc);
         }
 
-        layoutDataForRecord(recordIndex: number, dc: DrawContext)
+        layoutDataForRecord(recordIndex: number, dc: DrawContext, dr: bps.LayoutResult)
         {
             var stackWidth = this._view.zMapping().binCount;
             var stackHeight = this._view.zMapping().binCount;
@@ -295,22 +304,20 @@ module beachParty
             var xrel = layerindex % stackWidth;
             var yrel = Math.floor(layerindex / stackWidth);
 
-            var height = width;
-
-            var x = left + (xrel * this._space);
-            var y = top + (yrel * this._space);
+            dr.x = left + (xrel * this._space);
+            dr.y = top + (yrel * this._space);
             // var z = -2.0 + (layernum * this._itemHeight * 1.1);
 
-            var width = Math.abs(this._itemWidth);
-            var height = Math.abs(this._itemHeight);
+            dr.width = Math.abs(this._itemWidth);
+            dr.height = Math.abs(this._itemHeight);
 
             var stackDepth = this._binDepth;
 
-            if (this._chartOptions.layout === "Cubes")
+            if (this._chartOptions.layout == "Cubes")
             {
                 //----- make the shapes as close to cubes as possible ----
-                stackDepth = 1.1 * Math.abs(width);
-                var cubeDepth = width;
+                stackDepth = 1.1 * Math.abs(dr.width);
+                dr.depth = dr.width;
             }
             else
             {
@@ -319,33 +326,19 @@ module beachParty
                 //---- support for variable size columns (most useful if stackcount=1) ----
                 if (nv.size && nv.size.count)
                 {
-                    width = width * this.scaleColData(nv.size, recordIndex, dc.scales.size, 1);
-                    height = width;
+                    dr.width = dr.width * this.scaleColData(nv.size, recordIndex, dc.scales.size, 1);
+                    dr.height = dr.width;
                 }
 
                 //---- this keeps the shapes from becomming too distorted, so we don't always fill the space ----
-                stackDepth = Math.min(this._binDepth, width);
-
-                var cubeDepth = .9 * stackDepth;
+                stackDepth = Math.min(this._binDepth, dr.width);
+                dr.depth = .9 * stackDepth;
             }
 
-            var z = dc.z + (layernum * stackDepth) + stackDepth / 2;
+            dr.z = dc.z + (layernum * stackDepth) + stackDepth / 2;
 
-            // var z = -2.0 + (layernum * depth * 1.1);
-
-            //if (recordIndex == 0)
-            //{
-            //    vp.utils.debug("x = " + x + " y = " + y + " z = " + z + " width = " + width + " height = " + height + " depth = " + stackDepth);
-            //}
-
-            var colorIndex = this.scaleColData(nv.colorIndex, recordIndex, dc.scales.colorIndex);
-            var imageIndex = this.scaleColData(nv.imageIndex, recordIndex, dc.scales.imageIndex);
-            var opacity = 1;
-
-            return {
-                x: x, y: y, z: z, width: width, height: height, depth: cubeDepth, colorIndex: colorIndex, opacity: opacity,
-                imageIndex: imageIndex, theta: 0,
-            };
+            dr.colorIndex = this.scaleColData(nv.colorIndex, recordIndex, dc.scales.colorIndex);
+            dr.imageIndex = this.scaleColData(nv.imageIndex, recordIndex, dc.scales.imageIndex);
         }
 
     }

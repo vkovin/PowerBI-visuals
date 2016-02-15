@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    scrubberDialog.ts - popup panel for data scrubbing.
 //-------------------------------------------------------------------------------------
 
@@ -41,7 +41,7 @@ module beachPartyApp
             this._origColInfos = origColInfos;
             this._startingColInfos = colInfos;
 
-            var rootW = vp.select(this._root);
+            var rootW = vp.select(this._contentRow);
 
             var panelTableW = rootW.append("table")
                 .css("border-bottom", "1px solid gray");
@@ -51,7 +51,7 @@ module beachPartyApp
             //---- add LEFT PANEL ----
             var leftPanelW = panelRow.append("td")
                 .css("border-right", "1px solid gray")
-                .css("vertical-align", "top");
+                // .css("vertical-align", "top");
 
             //---- add RIGHT PANEL ----
             var rightPanelW = panelRow.append("td")

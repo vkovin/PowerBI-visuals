@@ -7,83 +7,25 @@
 
 module beachPartyApp
 {
-    export class ColorLegendClass extends beachParty.DataChangerClass
+    export class ColorLegendClass extends BaseLegendClass
     {
         private container: HTMLElement;
 
-        //---- constants ----
-        _maxPaletteHeight = 200;
-        _entryHeight = 20;
-        _entryWidth = 20;
-
-        _rootElem: HTMLElement;
-        _titleElem: HTMLElement;
-        _paletteElem: HTMLElement;
-        _labelsElem: HTMLElement;
-        _ticksElem: HTMLElement;
-        _textElems: HTMLElement[];
-
         _paletteElements: HTMLElement[];
+        _continuousPalette: HTMLElement;
 
         _cm: bps.ColorMappingData;
         _bpsHelper: bps.ChartHostHelperClass;
         _app: AppClass;                 // need to get latest ColInfo on legend build
+        _colType: string;
+        _isNumeric: boolean;
+        _lastValue = null;
 
         constructor(container: HTMLElement, app: AppClass, rootName: string, bpsHelper: bps.ChartHostHelperClass)
         {
-            super();
+            super(app, rootName, bpsHelper, "colorLegendTitle", "colorPanelRequest");
 
-            this.container = container;
-
-            this._app = app;
-            this._cm = null;
-            this._bpsHelper = bpsHelper;
-
-            var root = vp.select(this.container, "." + rootName)
-                .addClass("legend")
-                .css("margin-bottom", "20px");
-
-            //---- add colName as TITLE ----
-            var title = root.append("div")
-                .addClass("legendTitle textButton")
-                .addClass("colorLegendTitle")
-                .attach("click", (e) =>
-                {
-                    AppUtils.callPanelOpen(e, (e) => this.onDataChanged("colorPanelRequest"));
-                });
-
-            var table = root.append("table")
-                .addClass("legendHolder");
-
-            var row = table.append("tr");
-
-            //---- add PALETTE ----
-            var paletteW = row.append("td")
-                .addClass("legendPalette")
-                .attr("valign", "top")
-                .css("width", "20px");
-
-            //---- add TICKS ----
-            var ticksW = row.append("td")
-                .addClass("legendTicks")
-                .css("width", "0px")
-                .css("position", "relative");
-
-            //---- add LABELS ----
-            var labelsW = row.append("td")
-                .addClass("legendLabels")
-                .css("position", "relative");
-
-            ////---- add spacer TD as last column ----
-            //var spacerW = row.append("td")
-
-            this._rootElem = root[0];
-            this._titleElem = title[0];
-            this._paletteElem = paletteW[0];
-            this._labelsElem = labelsW[0];
-            this._ticksElem = ticksW[0];
-
-            this.updateLegend();
+            this.rebuildLegend();
         }
 
         selectColorBox(index: number)
@@ -108,12 +50,6 @@ module beachPartyApp
             }
         }
 
-        show(value: boolean)
-        {
-            vp.select(this._rootElem)
-                .css("display", (value) ? "" : "none");
-        }
-
         colorMapping(value?: bps.ColorMappingData)
         {
             if (arguments.length === 0)
@@ -124,35 +60,32 @@ module beachPartyApp
             this._cm = value;
             this.onDataChanged("colorMapping");
 
-            this.updateLegend();
+            this.rebuildLegend();
         }
 
-        updateLegend()
+        rebuildLegend()
         {
             var cm = this._cm;
-            var name = (cm) ? cm.colName : "";
+            var showLegend = (cm != null && cm.colorPalette != null && cm.colName != null && cm.colName != "");
 
-            vp.select(this._rootElem)
-                .css("display", (name) ? "block" : "none");
+            //---- show/hide legend ----
+            this.show(showLegend);
 
-            vp.select(this._titleElem)
-                .text(name);
-
-            this.rebuildPalette();
-
-        }
-
-        search(colName: string, value: string)
-        {
-            this._bpsHelper.search(colName, value);
-        }
-
-        rebuildPalette()
-        {
-            var cm = this._cm;
-
-            if (cm && cm.colorPalette && cm.colName)
+            if (showLegend)
             {
+                this.measureTextAndSetItemHeight();
+
+                var name = cm.colName;
+
+                vp.select(this.container, this._titleElem)
+                    .text(name)
+
+                if (this._continuousPalette)
+                {
+                    vp.select(this._continuousPalette).remove();
+                    this._continuousPalette = null;
+                }
+
                 var colorPalette = cm.colorPalette;
                 var breaks = cm.breaks;
 
@@ -163,127 +96,22 @@ module beachPartyApp
                 }
 
                 var colInfo = this._app.getColInfo(cm.colName);
-                var isNumeric = (colInfo.colType !== "string");            // number or date
+                var colType = colInfo.colType;
 
-                var entryHeight = this.drawColorPalette(cm, count, colorPalette, isNumeric);
-                this.drawTickMarks(cm, count, colorPalette, this._entryWidth, entryHeight);
-                this.drawLabels(cm, count, colorPalette, this._entryWidth, entryHeight, colInfo.colType);
+                this._colType = colType;
+                this._isNumeric = (colInfo.colType != "string");            // number or date
+
+                this._lastValue = null;
+                this._textElems = [];
+                this._paletteElements = [];
+
+                this.rebuildLegendEx(cm, breaks.length, this._isNumeric);
             }
         }
 
-        drawTickMarks(cm: bps.ColorMappingData, count: number, colorPalette: any[], entryWidth: number, entryHeight: number)
+        search(colName: string, value: string)
         {
-            var ticksW = vp.select(this._ticksElem);
-
-            ticksW
-                .clear();
-
-            var textTop = (entryHeight / 2) - 9;
-            count++;
-
-            //---- go thru backwards, since we want the LIGHT colors at the top (and client palettes start with DARK) ----
-            for (var i = count - 1; i >= 0; i--)
-            {
-                ticksW.append("div")
-                    .addClass("legendTick")
-                    .css("position", "absolute")
-                    .css("left", "-3px")
-                    .css("top", textTop + "px");
-
-                if (i === count - 1)
-                {
-                    textTop--;          // fudge factor
-                }
-
-                textTop += entryHeight;
-            }
-        }
-
-        drawLabels(cm: bps.ColorMappingData, count: number, colorPalette: any[], entryWidth: number, entryHeight: number, colType: string)
-        {
-            var breaks = cm.breaks;
-            var labelsW = vp.select(this._labelsElem);
-            this._textElems = [];
-
-            labelsW
-                .clear();
-
-            var textTop = ((count-1) * entryHeight) + (entryHeight / 2) - 10;
-            var isNumeric = (colType !== "string");
-
-            if (isNumeric)
-            {
-                count++;
-                textTop += 10;
-            }
-
-            var lastValue = null;
-            
-            if (colType === "number")
-            {
-                var formatter = <any>vp.formatters.createCommaFormatter(2);
-            }
-            else if (colType === "date")
-            {
-                var minDate = cm.breaks[0];
-                var maxDate = cm.breaks[cm.breaks.length-1];
-                var formatter = vp.formatters.createDateFormatterFromRange(minDate, maxDate, cm.stepsRequested);
-            }
-            else
-            {
-                var formatter = null;
-            }
-
-            //---- go thru forward, so we can access "lastValue" when processing "other" ----
-            for (var i = 0; i < count; i++)
-            {
-                var value = (breaks) ? breaks[i] : "";
-                var text = value;
-
-                if (formatter)
-                {
-                    text = formatter(text);
-                }
-
-                var tooltip = (text === "Other") ? "All other values mapped here" : text;
-
-                var labelW = labelsW.append("div")
-                    .text(text)
-                    .addClass("legendLabel")
-                    .css("position", "absolute")
-                    .css("left", "4px")
-                    .css("max-width", "92px")
-                    .css("top", textTop + "px")
-                    .title(tooltip)
-                    .attach("click", (e) => this.searchForEntryValues(e));
-
-                labelW[0].colName = cm.colName;
-
-                if (value === "Other")
-                {
-                    labelW[0].fromValue = lastValue;
-                    labelW[0].toValue = lastValue;
-                    labelW[0].searchType = bps.TextSearchType.greaterThanEqual;
-                }
-                else if (isNumeric)
-                {
-                    labelW[0].fromValue = (i === 0) ? value : lastValue;
-                    labelW[0].toValue = value;
-                    labelW[0].searchType = bps.TextSearchType.betweenInclusive;
-                }
-                else
-                {
-                    labelW[0].fromValue = value;
-                    labelW[0].toValue = value;
-                    labelW[0].searchType = bps.TextSearchType.exactMatch;
-                }
-
-                var colorIndex = i;        // (count - 1) - i;
-                this._textElems[colorIndex] = labelW[0];
-
-                lastValue = value;
-                textTop -= entryHeight;
-            }
+            this._bpsHelper.search(colName, value);
         }
 
         searchForEntryValues(e)
@@ -299,79 +127,141 @@ module beachPartyApp
             this._app.doSearch("Color", elem.colName, elem.fromValue, elem.toValue, elem.searchType);
         }
 
-        drawColorPalette(cm: bps.ColorMappingData, count: number, colorPalette: any[], isNumeric: boolean)
+        buildContinuousPaletteDiv(tdW: vp.dom.IWrapperOuter)
         {
-            var entryWidth = this._entryWidth;
-            var entryHeight = this._entryHeight;
+            var cm = this._cm;
+            var colorPalette = cm.colorPalette;
+            var count = colorPalette.length;
+
+            //---- as a workaround to appending it to the TD of first row (with rowSpan=999), which produces weird layout issues ----
+            //---- we just plop it down as child of holderParent, using absolute positioning. ----
+            var holderParentW = vp.select(this.container, this._holderParent);
+
+            var paletteW = holderParentW.prepend("div")
+                .css("position", "absolute")
+                .css("left", "1px")         // place within border
+                .css("top", "0px")
+
+            var lg = "linear-gradient(";
+            //---- go thru backwards, since we want the LIGHT colors at the top (and client palettes start with DARK) ----
+            for (var i = count - 1; i >= 0; i--)
+            {
+                if (i != count - 1)
+                {
+                    lg += ",";
+                }
+
+                var cr = vp.color.colorFromPalette(colorPalette, i);
+                lg += cr;
+            }
+
+            lg += ")";
+
+            var paletteHeight = Math.min(this._maxPaletteHeight, this._entryHeight * count);
+            //entryHeight = paletteHeight / count;
+
+            //---- CONTINUOUS ----
+            paletteW
+                .css("background", lg)
+                .css("height", paletteHeight + "px")
+                .css("width", this._entryWidth + "px")
+                //.css("cursor", "pointer")
+                .css("pointer-events", "none")
+                //.addClass("colorPaletteEntry")
+
+            return paletteW[0];
+        }
+
+        fillPaletteEntry(parentW: vp.dom.singleWrapperClass, i: number, isTop: boolean)
+        {
+            var cm = this._cm;
+            var colorPalette = cm.colorPalette;
             var breaks = cm.breaks;
 
-            var paletteW = vp.select(this._paletteElem);
-
-            paletteW
-                .clear();
-                //.css("width", entryWidth + "px")
+            var cr = vp.color.colorFromPalette(colorPalette, i);
+            var text = (breaks) ? breaks[i] : "";
 
             if (cm.isContinuous)
             {
-                var lg = "linear-gradient(";
+                //---- we will overlay this, so don't draw a color ----
+                cr = "transparent";
+            }
 
-                //---- go thru backwards, since we want the LIGHT colors at the top (and client palettes start with DARK) ----
-                for (var i = count - 1; i >= 0; i--)
-                {
-                    if (i !== count - 1)
-                    {
-                        lg += ",";
-                    }
+            //---- this will overlay the regular palette, but it will still be used for hit-testing ----
+            if (isTop && cm.isContinuous)
+            {
+                this._continuousPalette = this.buildContinuousPaletteDiv(parentW);
+                this._paletteElements[i] = this._continuousPalette;
+            }
 
-                    var cr = vp.color.colorFromPalette(colorPalette, i);
-                    lg += cr;
-                }
+            var colorEntryW = parentW.append("div")
+                .css("background-color", cr)
+                .addClass("colorPaletteEntry")
+                .css("width", this._entryWidth + "px")
+                .css("height", (this._entryHeight - 2) + "px")          // allow for mouseover, mousedown border without movement
+                .customAttr("value", text)
+                .attach("click", (e) => this.searchForEntryValues(e))
 
-                lg += ")";
+            colorEntryW[0].colorIndex = (this._isNumeric) ? (i + 1) : i;
+            this._paletteElements[i] = colorEntryW[0];
 
-                var paletteHeight = Math.min(this._maxPaletteHeight, entryHeight * count);
+        }
 
-                //---- CONTINUOUS ----
-                paletteW
-                    .css("background", lg)
-                    .css("height", paletteHeight + "px");
+        fillLabelEntry(parentW: vp.dom.singleWrapperClass, i: number, yOffset: number)
+        {
+            var cm = this._cm;
+            var breaks = cm.breaks;
 
-                entryHeight = paletteHeight / count;
+            var value = (breaks) ? breaks[i] : "";
+            var text = this.formatLabel(value);
+
+            var tooltip = (text == "Other") ? "All other values mapped here" : text;
+
+            var labelW = parentW.append("div")
+                .text(text)
+                .addClass("legendLabel")
+                .css("max-width", "92px")
+                .title(tooltip)
+                .attach("click", (e) => this.searchForEntryValues(e))
+
+            if (this._isNumeric)
+            {
+                parentW
+                    .css("position", "relative")
+
+                //---- shift labels up and to the right ----
+                labelW
+                    .css("position", "relative")
+                    .css("left", "8px")
+                    .css("top", (yOffset - this._entryHeight / 2) + "px")
+            }
+
+            //---- add information to support click/select ----
+            labelW[0].colName = cm.colName;
+
+            if (value == "Other")
+            {
+                labelW[0].fromValue = this._lastValue;
+                labelW[0].toValue = this._lastValue;
+                labelW[0].searchType = bps.TextSearchType.greaterThanEqual;
+            }
+            else if (this._isNumeric)
+            {
+                labelW[0].fromValue = (i == 0) ? value : this._lastValue;
+                labelW[0].toValue = value;
+                labelW[0].searchType = bps.TextSearchType.betweenInclusive;
             }
             else
             {
-                paletteW
-                    .css("background", "");
-
-                //---- STEPS ----
-                if (count * entryHeight > this._maxPaletteHeight)
-                {
-                    entryHeight = this._maxPaletteHeight / count;
-                }
-
-                this._paletteElements = [];
-
-                //---- go thru backwards, since we want the LIGHT colors at the top (and client palettes start with DARK) ----
-                for (var i = count - 1; i >= 0; i--)
-                {
-                    var cr = vp.color.colorFromPalette(colorPalette, i);
-                    var text = (breaks) ? breaks[i] : "";
-
-                    var colorEntryW = paletteW.append("div")
-                        .css("background-color", cr)
-                        .addClass("colorPaletteEntry")
-                        .css("width", entryWidth + "px")
-                        .css("height", entryHeight + "px")
-                        .customAttr("value", text)
-                        .attach("click", (e) => this.searchForEntryValues(e));
-
-                    colorEntryW[0].colorIndex = (isNumeric) ? (i + 1) : i;
-
-                    this._paletteElements[i] = colorEntryW[0];
-                }
+                labelW[0].fromValue = value;
+                labelW[0].toValue = value;
+                labelW[0].searchType = bps.TextSearchType.exactMatch;
             }
 
-            return entryHeight;
+            var colorIndex = i;        // (count - 1) - i;
+            this._textElems[colorIndex] = labelW[0];
+
+            this._lastValue = value;
         }
     }
 }

@@ -26,6 +26,7 @@ module beachParty
         private _canvasColor = "black";
         private _shapeColor = "#0cf";
         private _shapeImageName = null;
+        private _isShapeImageEnabled = true;
         private _userSizeFactor = 1;
         private _separationFactor = 1;
         private _defaultShapeSize = null;
@@ -42,7 +43,7 @@ module beachParty
         private _isWireframe = false;
         private _isCullingEnabled = false;
         private _dataMgr: DataMgrClass;
-        private _isContinuousDrawing = true;         // when true, forces animation timer to always run (seems like we can get along with it=false)
+        private _isContinuousDrawing = false;         // when true, forces animation timer to always run (seems like we can get along with it=false)
         _windowMgr = null;
         private _toPercentOverride: number;
         private _isAnimOverride = false;
@@ -50,6 +51,12 @@ module beachParty
         private _autoRebuild = true;
         private _hoverParams = new bps.HoverParams();
         private _selectionParams = new bps.SelectionParams();
+        private _clusteringParams = new bps.ClusteringParams();
+        private _flatParams = new bps.FlatParams();
+        private _instancingParams = new bps.InstancingParams();
+        private _spiralParams = new bps.SpiralParams();
+        private _customParams = new bps.CustomParams();
+        private _scatterParams = new bps.ScatterParams();
 
         private _chartFrameData: bps.ChartFrameData;
         private _colorMapping: bps.ColorMappingData;
@@ -58,15 +65,17 @@ module beachParty
         private _sizeMapping: bps.SizeMappingData;
         private _textMapping: bps.TextMappingData;
         private _lineMapping: bps.LineMappingData;
-        private _imageMapping: bps.ImageMappingData;
+        private _shapeMapping: bps.ShapeMappingData;
         private _facetMapping: bps.FacetMappingData;
         private _xMapping: bps.MappingData;
         private _yMapping: bps.MappingData;
         private _zMapping: bps.MappingData;
+        private _auxMapping: bps.MappingData;
         private _hoverPrimaryKey = null;
         private _maxItemCount = 0;
         private _isMaxItemCountEnabled = false;
         private _wasFirstFilteredStage;
+        private _blankValueStr = "<blank>";
 
         //---- data-related ----
         public _dataFrame: DataFrameClass;
@@ -77,6 +86,7 @@ module beachParty
         private _isVaas = false;
         private _chart: BaseGlVisClass;
         private _gl: WebGLRenderingContext;
+        private _glInst: ANGLE_instanced_arrays;
         private _ctx: CanvasRenderingContext2D;
         private _transformMgr: TransformMgrClass;
         private _drawPrimitive = bps.DrawPrimitive.cube;            //safest default
@@ -129,12 +139,13 @@ module beachParty
             this._sizeMapping = new bps.SizeMappingData();
             this._textMapping = new bps.TextMappingData();
             this._lineMapping = new bps.LineMappingData();
-            this._imageMapping = new bps.ImageMappingData();
+            this._shapeMapping = new bps.ShapeMappingData();
             this._facetMapping = new bps.FacetMappingData();
 
             this._xMapping = new bps.MappingData();
             this._yMapping = new bps.MappingData();
             this._zMapping = new bps.MappingData();
+            this._auxMapping = new bps.MappingData();
 
             //---- create an svg GROUP element for chart to use for all of its SVG shapes ----
             var svgChartGroup = vp.select(this._svgDoc).append("g");
@@ -150,6 +161,10 @@ module beachParty
 
             //---- specify "preserveDrawingBuffer=true" so we can capture images using toDataUrl() ----
             this._gl = glUtils.getContext(canvas3dElem, { preserveDrawingBuffer: true });  // true });
+
+            //---- look for WebGL extension for instancing ----
+            this._glInst = glUtils.getExtension(this._gl, "ANGLE_instanced_arrays");
+
             this._ctx = canvas2dElem.getContext("2d");
 
             //---- this handles all of our 3D transforms and their variants ----
@@ -167,6 +182,44 @@ module beachParty
 
             //---- create the default chart ----
             //this.setChartType("Scatter");
+        }
+
+        getInstancingExt()
+        {
+            return null;   
+            //return (this._instancingParams.isInstancingEnabled) ? this._glInst : null;
+        }
+
+        addMappingToList(list: string[], md: bps.MappingData)
+        {
+            if (md && md.colName)
+            {
+                list.push(md.colName);
+            }
+        }
+
+        ensureColumnsAreLoaded()
+        {
+            if (this._dataMgr.colsOnDemand())
+            {
+                var list = [];
+
+                //---- add columns needed by current view to list ----
+                this.addMappingToList(list, this._xMapping);
+                this.addMappingToList(list, this._yMapping);
+                this.addMappingToList(list, this._zMapping);
+                this.addMappingToList(list, this._auxMapping);
+
+                this.addMappingToList(list, this._colorMapping);
+                this.addMappingToList(list, this._sizeMapping);
+                this.addMappingToList(list, this._shapeMapping);
+                this.addMappingToList(list, this._facetMapping);
+                this.addMappingToList(list, this._textMapping);
+
+                //---- note: other columns may be needed as they are requested (search, dataTip, data slicer, sorting) ----
+
+                this._dataFrame.loadColumns(list);
+            }
         }
 
         maxItemCount(value?: number)
@@ -254,7 +307,7 @@ module beachParty
             this.hoverPrimaryKey(null);
         }
 
-        applyHover(mousePos: any)
+        applyHover(mousePos: any, showHover: boolean)
         {
             var hp = this._hoverParams;
             //var primaryKey = null;
@@ -264,7 +317,7 @@ module beachParty
 
             if (chart)
             {
-                if (hp.hoverMatch === bps.HoverMatch.point)
+                if (hp.hoverMatch == bps.HoverMatch.point)
                 {
                     var ray = this._transformMgr.getRayFromScreenPos(mousePos.x, mousePos.y);
                     var items = chart.hitTestRay(ray, mousePos);
@@ -273,7 +326,7 @@ module beachParty
                         hpk = items[0].primaryKey;
                     }
                 }
-                else if (hp.hoverMatch === bps.HoverMatch.square)
+                else if (hp.hoverMatch == bps.HoverMatch.square)
                 {
                     var sz = hp.squareSize;
                     if (sz >= 1)
@@ -290,19 +343,24 @@ module beachParty
                 }
             }
 
-            this.hoverPrimaryKey(hpk);
-
+            if (showHover)
+            {
+                var pkShow = (showHover) ? hpk: -1;
+                this.hoverPrimaryKey(pkShow);
+            }
+            
+            //---- return actual primary key to client ----
             return hpk;
         }
 
         hoverPrimaryKey(value?: string)
         {
-            if (arguments.length === 0)
+            if (arguments.length == 0)
             {
                 return this._hoverPrimaryKey;
             }
 
-            if (value !== this._hoverPrimaryKey)
+            if (value != this._hoverPrimaryKey)
             {
                 this._hoverPrimaryKey = value;
 
@@ -314,7 +372,20 @@ module beachParty
                 //}
 
                 this.onDataChanged("hoverPrimaryKey");
+
+                //vp.utils.debug("hoverPrimaryKey set to: " + value);
             }
+        }
+
+        blankValueStr(value?: string)
+        {
+            if (arguments.length == 0)
+            {
+                return this._blankValueStr;
+            }
+
+            this._blankValueStr = value;
+            this.onDataChanged("blankValueStr");
         }
 
         hitTestRectWithSelect(rcScreen, selectMode?: bps.SelectMode)
@@ -477,11 +548,11 @@ module beachParty
 
             var usePartyGen = false;
 
-            if (value === "Flat")
+            if (value == "Flat")
             {
                 //usePartyGen = true;
 
-                if (layout === "Circle")
+                if (layout == "Spiral")
                 {
                     if (usePartyGen)
                     {
@@ -492,7 +563,7 @@ module beachParty
                         chart = new FlatCircle(this, this._gl, chartState, this.container, this._appMgr);
                     }
                 }
-                else if (layout === "Grid")
+                else if (layout == "Grid")
                 {
                     if (usePartyGen)
                     {
@@ -503,7 +574,7 @@ module beachParty
                         chart = new FlatGrid(this, this._gl, chartState, this.container, this._appMgr);
                     }
                 }
-                else if (layout === "Poisson")
+                else if (layout == "Poisson")
                 {
                     chart = new PartyGenPlotClass(this, this._gl, chartState, "FlatPoisson", this.container, this._appMgr);
                 }
@@ -519,7 +590,7 @@ module beachParty
                     }
                 }
             }
-            else if (value === "Scatter")
+            else if (value == "Scatter")
             {
                 if (usePartyGen)
                 {
@@ -542,21 +613,30 @@ module beachParty
                 }
 
             }
-            else if (value === "Line")
+            else if (value == "Line")
             {
                 chart = new LinePlotClass(this, this._gl, chartState, this.container, this._appMgr);
+                //chart = new scatterPlotClass(this, this._gl, chartState);
             }
-            else if (value === "Radial")
+            else if (value == "Cluster")
+            {
+                chart = new ScatterPlotClass(this, this._gl, chartState, this.container, this._appMgr);
+            }
+            else if (value == "Radial")
             {
                 chart = new RadialClass(this, this._gl, chartState, this.container, this._appMgr);
             }
-            else if (value === "Density")
+            else if (value == "TrueCustom")
             {
-                if (layout === "Circle") 
+                chart = new TrueCustomClass(this, this._gl, chartState, this.container, this._appMgr);
+            }
+            else if (value == "Density")
+            {
+                if (layout == "Circle") 
                 {
                     chart = new DensityCircle(this, this._gl, chartState, this.container, this._appMgr);
                 }
-                else if (layout === "Grid") 
+                else if (layout == "Grid") 
                 {
                     chart = new DensityGrid(this, this._gl, chartState, this.container, this._appMgr);
                 }
@@ -565,13 +645,13 @@ module beachParty
                     chart = new DensityRandom(this, this._gl, chartState, this.container, this._appMgr);
                 }
             }
-            else if (value === "Violin")
+            else if (value == "Violin")
             {
-                chart = new ViolinClass(this, this._gl, chartState, this.container, this._appMgr) ;
+                chart = new ViolinClass(this, this._gl, chartState, this.container, this._appMgr);
             }
-            else if (value === "Bar")
+            else if (value == "Bar")
             {
-                if (layout === "Sum")
+                if (layout == "Sum")
                 {
                     chart = new BarSumClass(this, this._gl, chartState, this.container, this._appMgr);
                 }
@@ -579,7 +659,7 @@ module beachParty
                 {
                     if (usePartyGen)
                     {
-                        if (layout === "Random")
+                        if (layout == "Random")
                         {
                             chart = new PartyGenPlotClass(this, this._gl, chartState, "BarRandom", this.container, this._appMgr);
                         }
@@ -594,9 +674,9 @@ module beachParty
                     }
                 }
             }
-            else if (value === "Column")
+            else if (value == "Column")
             {
-                if (layout === "Sum")
+                if (layout == "Sum")
                 {
                     chart = new ColumnSumClass(this, this._gl, chartState, this.container, this._appMgr);
                 }
@@ -604,7 +684,7 @@ module beachParty
                 {
                     if (usePartyGen)
                     {
-                        if (layout === "Random")
+                        if (layout == "Random")
                         {
                             chart = new PartyGenPlotClass(this, this._gl, chartState, "ColumnRandom", this.container, this._appMgr);
                         }
@@ -619,17 +699,25 @@ module beachParty
                     }
                 }
             }
-            else if (value === "Scatter-3D")
+            else if (value == "Scatter-3D")
             {
                 chart = new ScatterPlot3dClass(this, this._gl, chartState, this.container, this._appMgr);
             }
-            else if (value === "Stacks") 
+            else if (value == "Stacks") 
             {
                 chart = new StacksBinClass(this, this._gl, chartState, this.container, this._appMgr);
             }
-            else if (value === "Squarify") 
+            else if (value == "Squarify") 
             {
                 chart = new PartyGenPlotClass(this, this._gl, chartState, "FlatSquarify", this.container, this._appMgr);
+            }
+            else if (value == "X-Band") 
+            {
+                chart = new XBandClass(this, this._gl, chartState, this.container, this._appMgr);
+            }
+            else if (value == "Y-Band") 
+            {
+                chart = new YBandClass(this, this._gl, chartState, this.container, this._appMgr);
             }
             else
             {
@@ -638,6 +726,7 @@ module beachParty
 
             this._chart = chart;
             chart._chartOptions = { layout: layout };
+            chart._requestedChartName = value;
 
             //this._transformer = chart.getTransformer();
 
@@ -761,6 +850,56 @@ module beachParty
             }
         }
 
+        takeSnapshot(plotOnly?: boolean)
+        {
+            var url; null;
+
+            if (this._chart)
+            {
+                var plotCanvas = <HTMLCanvasElement>vp.select("#canvas3d")[0];
+
+                if (plotOnly)
+                {
+                    //---- PNG is messed up for IE/Chrome/Firefox; JPEG seems to work correctly ----
+                    url = plotCanvas.toDataURL("image/jpeg", 1);
+                }
+                else
+                {
+                    //---- build canvas the same size as our engine document (to hold plot + axes) ----
+                    //---- other parts of snapshot (legends, etc.) will be drawn by the calling client app ----
+                    var chartCanvas = document.createElement("canvas");
+
+                    var topOffset = 30;        // allow for top label that draws into negative y
+                    var rightOffset = 0;       // make sure we get last pixel column of plot
+
+                    chartCanvas.width = innerWidth + rightOffset;
+                    chartCanvas.height = innerHeight + topOffset;
+
+                    var ctx = chartCanvas.getContext("2d");
+                    ctx.translate(0, topOffset);
+
+                    //---- draw plot ----
+                    var rcPlot = this._chart.getPlotBoundsInPixels();
+                    var yOffset = (this._chart._facetHelper) ? 10 : 0;     // why needed?
+                    ctx.drawImage(plotCanvas, rcPlot.left, rcPlot.top + yOffset);   
+
+                    //---- draw axes ----
+                    var yOffset = (this._chart._facetHelper) ? 20 : 10;     // why needed?
+                    ctx.translate(0, yOffset);    
+                    drawSvgChildren(ctx, this._svgDoc);
+
+                    //---- draw top/right borders ----
+                    ctx.translate(-1, -12);                // why needed?
+                    drawHtmlChildren(ctx, document.getElementById("canvas3d"));
+
+                    //---- PNG is messed up for IE/Chrome/Firefox; JPEG seems to work correctly ----
+                    url = chartCanvas.toDataURL("image/jpeg", 1);
+                }
+            }
+              
+            return url;
+        }
+
         buildNow(ignoreFilteredStage?: boolean)
         {
             if (this._chart)
@@ -792,8 +931,11 @@ module beachParty
 
             if (this._animStatsElem && this._showChartDebugInfo && chart)
             {
-                this._animStatsElem.textContent = "ANIM: FPS=" + chart.getFrameRate() + ", toPercent=" + chart._toPercent.toFixed(2) + ", usingPrimaryBuffers=" +
-                chart._usingPrimaryBuffers + ", animCycleCount=" + chart._animCycleCount;
+                var usingPrimary = chart.isUsingPrimaryBuffers();
+
+                this._animStatsElem.textContent = "ANIM: FPS=" + chart.getFrameRate() + ", toPercent=" +
+                    chart._toPercent.toFixed(2) + ", usingPrimaryBuffers=" + usingPrimary + ", animCycleCount="
+                    + chart._animCycleCount;
             }
         }
 
@@ -864,7 +1006,7 @@ module beachParty
             }
         }
 
-        rebuildMemStats()
+         rebuildMemStats()
         {
             var chart = this._chart;
             if (chart)
@@ -875,9 +1017,10 @@ module beachParty
                     var objName = this.drawingPrimitive();
                     var recordCount = chart.getDataLength();
                     var drawPrimName = bps.DrawPrimitive[chart._drawPrimitive];
+                    var totalVertexCount = chart.getTotalVertexCount();
 
                     var titleMsg = "MEMORY: chart=" + this._chartType + ", " + vp.formatters.comma(recordCount) + " " + objName + "s, drawPrimitive=" + drawPrimName + 
-                        ", vertices: " + vp.formatters.comma(chart._vertexCount) + 
+                        ", vertices: " + vp.formatters.comma(totalVertexCount) + 
                         ", arrays: " + (chart.getArrayMemory() / (1000 * 1000)).toFixed(1) + " MB";
 
                     this._memStatsElem.textContent = titleMsg;
@@ -1013,6 +1156,84 @@ module beachParty
 
             this._lightingParams = value;
             this.onDataChanged("lightingParams");
+
+            return this;
+        }
+
+        clusteringParams(value?: bps.ClusteringParams): any
+        {
+            if (value === undefined)
+            {
+                return this._clusteringParams;
+            }
+
+            this._clusteringParams = value;
+            this.onDataChanged("clusteringParams");
+
+            return this;
+        }
+
+        flatParams(value?: bps.FlatParams): any
+        {
+            if (value === undefined)
+            {
+                return this._flatParams;
+            }
+
+            this._flatParams = value;
+            this.onDataChanged("flatParams");
+
+            return this;
+        }
+
+        instancingParams(value?: bps.InstancingParams): any
+        {
+            if (value === undefined)
+            {
+                return this._instancingParams;
+            }
+
+            this._instancingParams = value;
+            this.onDataChanged("instancingParams");
+
+            return this;
+        }
+
+        customParams(value?: bps.CustomParams): any
+        {
+            if (value === undefined)
+            {
+                return this._customParams;
+            }
+
+            this._customParams = value;
+            this.onDataChanged("customParams");
+
+            return this;
+        }
+
+        scatterParams(value?: bps.ScatterParams): any
+        {
+            if (value === undefined)
+            {
+                return this._scatterParams;
+            }
+
+            this._scatterParams = value;
+            this.onDataChanged("scatterParams");
+
+            return this;
+        }
+
+        spiralParams(value?: bps.SpiralParams): any
+        {
+            if (value === undefined)
+            {
+                return this._spiralParams;
+            }
+
+            this._spiralParams = value;
+            this.onDataChanged("spiralParams");
 
             return this;
         }
@@ -1186,16 +1407,16 @@ module beachParty
             this.onDataChanged("lineMapping");
         }
 
-        imageMapping(value?: bps.ImageMappingData)
+        shapeMapping(value?: bps.ShapeMappingData)
         {
-            if (value === undefined || value === null)
+            if (value === undefined)
             {
-                return this._imageMapping;
+                return this._shapeMapping;
             }
 
-            this._imageMapping = value;
+            this._shapeMapping = value;
 
-            this.onDataChanged("imageMapping");
+            this.onDataChanged("shapeMapping");
         }
 
         facetMapping(value?: bps.FacetMappingData)
@@ -1244,6 +1465,18 @@ module beachParty
             this._zMapping = value;
 
             this.onDataChanged("zMapping");
+        }
+
+        auxMapping(value?: bps.MappingData)
+        {
+            if (value === undefined)
+            {
+                return this._auxMapping;
+            }
+
+            this._auxMapping = value;
+
+            this.onDataChanged("auxMapping");
         }
 
         chartFrameData(value?: bps.ChartFrameData)
@@ -1300,6 +1533,18 @@ module beachParty
             this._shapeImageName = value;
 
             this.onDataChanged("shapeImageName");
+        }
+
+        isShapeImageEnabled(value?: boolean)
+        {
+            if (value === undefined)
+            {
+                return this._isShapeImageEnabled;
+            }
+
+            this._isShapeImageEnabled = value;
+
+            this.onDataChanged("isShapeImageEnabled");
         }
 
         toPercentOverride(value?: number)

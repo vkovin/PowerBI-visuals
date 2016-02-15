@@ -7,88 +7,19 @@
 
 module beachPartyApp
 {
-    export class SizeLegendClass extends beachParty.DataChangerClass
+    export class SizeLegendClass extends BaseLegendClass
     {
-        private container: HTMLElement;
-
-        //---- constants ----
-        _maxPaletteHeight = 200;
-        _entryHeight = 20;
-        _entryWidth = 20;
-
-        _rootElem: HTMLElement;
-        _titleElem: HTMLElement;
-        _paletteElem: HTMLElement;
-        _labelsElem: HTMLElement;
-        _ticksElem: HTMLElement;
-        _textElems: HTMLElement[];
-
         _sm: bps.SizeMappingData;
         _bpsHelper: bps.ChartHostHelperClass;
         _app: AppClass;                 // need to get latest ColInfo on legend build
+        _isNumeric = false;
+        _lastValue = null;
 
-        constructor(container: HTMLElement, app: AppClass, rootName: string, bpsHelper: bps.ChartHostHelperClass)
+        constructor(app: AppClass, rootName: string, bpsHelper: bps.ChartHostHelperClass)
         {
-            super();
+            super(app, rootName, bpsHelper, "sizeLegendTitle", "sizePanelRequest");
 
-            this.container = container;
-
-            this._app = app;
-            this._sm = null;
-            this._bpsHelper = bpsHelper;
-
-            var root = vp.select(this.container, "." + rootName)
-                .addClass("legend")
-                .css("margin-bottom", "20px");
-
-            //---- add colName as TITLE ----
-            var title = root.append("div")
-                .addClass("legendTitle textButton")
-                .addClass("sizeLegendTitle")
-                .attach("click", (e) =>
-                {
-                    //---- request that the size panel be opened by the client
-                    AppUtils.callPanelOpen(e, (e) => this.onDataChanged("sizePanelRequest"));
-                });
-
-            var table = root.append("table")
-                .addClass("legendHolder");
-
-            var row = table.append("tr");
-
-            //---- add PALETTE ----
-            var paletteW = row.append("td")
-                .addClass("legendPalette")
-                .attr("valign", "top")
-                .css("width", "20px");
-
-            //---- add TICKS ----
-            var ticksW = row.append("td")
-                .addClass("legendTicks")
-                .css("width", "0px")
-                .css("position", "relative");
-
-            //---- add LABELS ----
-            var labelsW = row.append("td")
-                .addClass("legendLabels")
-                .css("position", "relative");
-
-            ////---- add spacer TD as last column ----
-            //var spacerW = row.append("td")
-
-            this._rootElem = root[0];
-            this._titleElem = title[0];
-            this._paletteElem = paletteW[0];
-            this._labelsElem = labelsW[0];
-            this._ticksElem = ticksW[0];
-
-            this.updateLegend();
-        }
-
-        show(value: boolean)
-        {
-            vp.select(this._rootElem)
-                .css("display", (value) ? "" : "none");
+            this.rebuildLegend();
         }
 
         sizeMapping(value?: bps.SizeMappingData)
@@ -101,22 +32,7 @@ module beachPartyApp
             this._sm = value;
             this.onDataChanged("sizeMapping");
 
-            this.updateLegend();
-        }
-
-        updateLegend()
-        {
-            var cm = this._sm;
-            var name = (cm) ? cm.colName : "";
-
-            vp.select(this._rootElem)
-                .css("display", (name) ? "block" : "none");
-
-            vp.select(this._titleElem)
-                .text(name);
-
-            this.rebuildPalette();
-
+            this.rebuildLegend();
         }
 
         search(colName: string, value: string)
@@ -124,14 +40,25 @@ module beachPartyApp
             this._app.doSearch("Size", colName, value, value, bps.TextSearchType.exactMatch);
         }
 
-        rebuildPalette()
+        rebuildLegend()
         {
-            var cm = this._sm;
+            var sm = this._sm;
+            var showLegend = (sm != null && sm.sizePalette != null && sm.colName != null && sm.colName != "");
 
-            if (cm && cm.sizePalette && cm.colName)
+            //---- show/hide legend ----
+            this.show(showLegend);
+
+            if (showLegend)
             {
-                var sizePalette = cm.sizePalette;
-                var breaks = cm.breaks;
+                var name = sm.colName;
+
+                vp.select(this._titleElem)
+                    .text(name)
+
+                this.measureTextAndSetItemHeight();
+
+                var sizePalette = sm.sizePalette;
+                var breaks = sm.breaks;
 
                 var count = sizePalette.length;
                 if (breaks && breaks.length < count)
@@ -139,111 +66,15 @@ module beachPartyApp
                     count = breaks.length;
                 }
 
-                var colInfo = this._app.getColInfo(cm.colName);
-                var isNumeric = (colInfo.colType !== "string");            // number or date
+                var colInfo = this._app.getColInfo(sm.colName);
+                var isNumeric = (colInfo.colType != "string");            // number or date
+                this._isNumeric = isNumeric;
 
-                var entryHeight = this.drawSizePalette(cm, count, sizePalette, isNumeric);
-                this.drawTickMarks(cm, count, sizePalette, this._entryWidth, entryHeight);
-                this.drawLabels(cm, count, sizePalette, this._entryWidth, entryHeight, isNumeric);
-            }
-        }
+                this._lastValue = null;
+                this._textElems = [];
+                this._paletteElements = [];
 
-        drawTickMarks(cm: bps.SizeMappingData, count: number, sizePalette: any[], entryWidth: number, entryHeight: number)
-        {
-            var ticksW = vp.select(this._ticksElem);
-
-            ticksW
-                .clear();
-
-            var textTop = (entryHeight / 2) - 9;
-            count++;
-
-            //---- go thru backwards, since we want the LIGHT sizes at the top (and client palettes start with DARK) ----
-            for (var i = count - 1; i >= 0; i--)
-            {
-                ticksW.append("div")
-                    .addClass("legendTick")
-                    .css("position", "absolute")
-                    .css("left", "-3px")
-                    .css("top", textTop + "px");
-
-                if (i === count - 1)
-                {
-                    textTop--;          // fudge factor
-                }
-
-                textTop += entryHeight;
-            }
-        }
-
-        drawLabels(cm: bps.SizeMappingData, count: number, sizePalette: any[], entryWidth: number, entryHeight: number, isNumeric: boolean)
-        {
-            var breaks = cm.breaks;
-            var labelsW = vp.select(this._labelsElem);
-            this._textElems = [];
-
-            labelsW
-                .clear();
-
-            var textTop = ((count - 1) * entryHeight) + (entryHeight / 2) - 10;
-
-            if (isNumeric)
-            {
-                count++;
-                textTop += 10;
-            }
-
-            var lastValue = null;
-
-            //---- go thru forward, so we can access "lastValue" when processing "other" ----
-            for (var i = 0; i < count; i++)
-            {
-                var value = (breaks) ? breaks[i] : "";
-                var text = value;
-
-                if (isNumeric)
-                {
-                    text = vp.formatters.comma(text, 2);
-                }
-
-                var tooltip = (text === "Other") ? "All other values mapped here" : text;
-
-                var labelW = labelsW.append("div")
-                    .text(text)
-                    .addClass("legendLabel")
-                    .css("position", "absolute")
-                    .css("left", "4px")
-                    .css("max-width", "92px")
-                    .css("top", textTop + "px")
-                    .title(tooltip)
-                    .attach("click", (e) => this.searchForEntryValues(e));
-
-                labelW[0].colName = cm.colName;
-
-                if (value === "Other")
-                {
-                    labelW[0].fromValue = lastValue;
-                    labelW[0].toValue = lastValue;
-                    labelW[0].searchType = bps.TextSearchType.greaterThan;
-                }
-                else if (isNumeric)
-                {
-                    labelW[0].fromValue = (i === 0) ? value : lastValue;
-                    labelW[0].toValue = value;
-                    labelW[0].searchType = bps.TextSearchType.betweenInclusive;
-                }
-                else
-                {
-                    labelW[0].fromValue = value;
-                    labelW[0].toValue = value;
-                    labelW[0].searchType = bps.TextSearchType.exactMatch;
-                }
-
-                var sizeIndex = i;        // (count - 1) - i;
-                this._textElems[sizeIndex] = labelW[0];
-
-                lastValue = value;
-                textTop -= entryHeight;
+                this.rebuildLegendEx(sm, breaks.length, this._isNumeric);
             }
         }
 
@@ -260,97 +91,107 @@ module beachPartyApp
             this._app.doSearch("Size", elem.colName, elem.fromValue, elem.toValue, elem.searchType);
         }
 
-        drawSizePalette(sm: bps.SizeMappingData, count: number, sizePalette: any[], isNumeric: boolean)
+        fillPaletteEntry(parentW: vp.dom.singleWrapperClass, i: number, isTop: boolean)
         {
-            var entryWidth = this._entryWidth;
+            //---- TODO: continuous size palette not yet supported ---
+            var cm = this._sm;
+            var sizePalette = cm.sizePalette;
+            var breaks = cm.breaks;
             var entryHeight = this._entryHeight;
-            var breaks = sm.breaks;
+            var entryWidth = this._entryWidth;
+            var isNumeric = this._isNumeric;
 
-            var paletteW = vp.select(this._paletteElem);
+            var sz = vp.scales.numberFromDiscretePalette(sizePalette, i);
+            var text = (breaks) ? breaks[i] : "";
 
-            paletteW
-                .clear();
-                //.css("width", entryWidth + "px")
+            //parentW.css("position", "relative")
 
-            if (false)      // "continuous" size palette not yet supported      sm.isContinuous)
+            var cellW = parentW.append("div")
+                .css("width", (entryWidth-2) + "px")
+                .css("height", (entryHeight-2) + "px")
+                .addClass("sizePaletteEntry")
+                .customAttr("value", text)
+                .attach("click", (e) => this.searchForEntryValues(e))
+                .css("margin-bottom", "-1px")           // overlap with next top border
+            //.css("display", "table-cell")
+                .css("position", "relative")
+
+            cellW[0].sizeIndex = (isNumeric) ? (i + 1) : i;
+
+            //---- now draw the size shape within the cell ----
+            var shapeSize = sz * (entryWidth - 4);
+            var left = ((entryWidth - 2) - shapeSize) / 2;
+            var top = ((entryHeight - 2) - shapeSize) / 2;
+
+            var shape = cellW.append("span")
+                .addClass("sizePaletteShape")
+                .css("width", shapeSize + "px")
+                .css("height", shapeSize + "px")
+                .css("background", "#bbb")
+                .css("display", "inline-block")
+                .css("margin-top", top + "px")
+                .css("margin-left", left + "px")
+        }
+
+        fillLabelEntry(parentW: vp.dom.singleWrapperClass, i: number, yOffset: number)
+        {
+            var cm = this._sm;
+            var sizePalette = cm.sizePalette;
+            var breaks = cm.breaks;
+            var entryHeight = this._entryHeight;
+            var entryWidth = this._entryWidth;
+            var isNumeric = this._isNumeric;
+
+            var value = (breaks) ? breaks[i] : "";
+            var text = this.formatLabel(value);
+
+            var tooltip = (text == "Other") ? "All other values mapped here" : text;
+
+            var labelW = parentW.append("div")
+                .text(text)
+                .addClass("legendLabel")
+                .title(tooltip)
+                .attach("click", (e) => this.searchForEntryValues(e))
+
+            if (this._isNumeric)
             {
-                var lg = "linear-gradient(";
+                parentW
+                    .css("position", "relative")
 
-                //---- go thru backwards, since we want the LIGHT sizes at the top (and client palettes start with DARK) ----
-                for (var i = count - 1; i >= 0; i--)
-                {
-                    if (i !== count - 1)
-                    {
-                        lg += ",";
-                    }
+                //---- shift labels up and to the right ----
+                labelW
+                    .css("position", "relative")
+                    .css("left", "8px")
+                    .css("top", (yOffset - this._entryHeight / 2) + "px")
+            }
 
-                    var sz = vp.scales.numberFromContinuousPalette(sizePalette, i);
+            labelW[0].colName = cm.colName;
+            var lastValue = this._lastValue;
 
-                    lg += sz;
-                }
-
-                lg += ")";
-
-                var paletteHeight = Math.min(this._maxPaletteHeight, entryHeight * count);
-
-                //---- CONTINUOUS ----
-                paletteW
-                    .css("background", lg)
-                    .css("height", paletteHeight + "px");
-
-                entryHeight = paletteHeight / count;
+            if (value == "Other")
+            {
+                labelW[0].fromValue = lastValue;
+                labelW[0].toValue = lastValue;
+                labelW[0].searchType = bps.TextSearchType.greaterThan;
+            }
+            else if (isNumeric)
+            {
+                labelW[0].fromValue = (i == 0) ? value : lastValue;
+                labelW[0].toValue = value;
+                labelW[0].searchType = bps.TextSearchType.betweenInclusive;
             }
             else
             {
-                paletteW
-                    .css("background", "");
-
-                //---- STEPS ----
-                if (count * entryHeight > this._maxPaletteHeight)
-                {
-                    entryHeight = this._maxPaletteHeight / count;
-                }
-
-                /// NOTE: sizePalette should only contain values between 0 and 1. 
-
-                //---- go thru backwards, since we want the LIGHT sizes at the top (and client palettes start with DARK) ----
-                for (var i = count - 1; i >= 0; i--)
-                {
-                    var sz = vp.scales.numberFromDiscretePalette(sizePalette, i);
-                    var text = (breaks) ? breaks[i] : "";
-
-                    var cellW = paletteW.append("div")
-                        .css("width", entryWidth + "px")
-                        .css("height", (entryHeight) + "px")
-                        .addClass("sizePaletteEntry")
-                        .customAttr("value", text)
-                        .attach("click", (e) => this.searchForEntryValues(e))
-                        .css("margin-bottom", "-1px")           // overlap with next top border
-                        //.css("display", "table-cell")
-                        .css("position", "relative");
-
-                    cellW[0].sizeIndex = (isNumeric) ? (i + 1) : i;
-
-                    //---- now draw the size shape within the cell ----
-                    var shapeSize = sz * (entryHeight-4);
-                    var left = (entryWidth - shapeSize) / 2;
-                    var top = (entryHeight - shapeSize) / 2;
-
-                    cellW.append("span")
-                        .addClass("sizePaletteShape")
-                        .css("width", shapeSize + "px")
-                        .css("height", shapeSize + "px")
-                        .css("background", "#bbb")
-                        .css("display", "inline-block")                        
-                        .css("top", left + "px")                        
-                        .css("left", top + "px")                        
-                        .css("position", "absolute");
-                        
-                }
+                labelW[0].fromValue = value;
+                labelW[0].toValue = value;
+                labelW[0].searchType = bps.TextSearchType.exactMatch;
             }
 
-            //---- allow for border with bottom/top overlap ----
-            return (entryHeight + 1);
+            var sizeIndex = i;        // (count - 1) - i;
+            this._textElems[sizeIndex] = labelW[0];
+
+            this._lastValue = value;
+            //textTop -= entryHeight;
         }
     }
 }

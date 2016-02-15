@@ -17,13 +17,14 @@ module beachParty
         _quoteChar: string;
 
         //---- scanner state ----
-        _text = null;
+        _text = <string> null;
         _offset = 0;
 
         constructor(text: string, delimiter: string, quoteChar: string)
         {
             this._delimiter = delimiter;
             this._quoteChar = quoteChar;
+            this._offset - 0;
 
             //---- make scanner simpler by collapsing multi char line endings ----
             this._text = text.replace(/\r\n/g, "\n");
@@ -41,7 +42,7 @@ module beachParty
             {
                 var ch = text[offset++];
 
-                if (ch === this._quoteChar)
+                if (ch == this._quoteChar)
                 {
                     //---- scan QUOTED value ----
                     value = "";
@@ -51,9 +52,9 @@ module beachParty
                     {
                         ch = text[offset++];
 
-                        if (ch === this._quoteChar)
+                        if (ch == this._quoteChar)
                         {
-                            if (offset < text.length && text[offset] === this._quoteChar)
+                            if (offset < text.length && text[offset] == this._quoteChar)
                             {
                                 //---- EMBEDDED quote ----
                                 value += ch;
@@ -69,11 +70,11 @@ module beachParty
                                 {
                                     var ch = text[offset];
 
-                                    if (ch === this._delimiter)
+                                    if (ch == this._delimiter)
                                     {
                                         offset++;       // "use" delimiter now
                                     }
-                                    else if (ch !== "\n")
+                                    else if (ch != "\n")
                                     {
                                         throw "expected delimiter or newline at end of quoted string, but found: " + ch;
                                     }
@@ -88,11 +89,11 @@ module beachParty
                         }
                     }
                 }
-                else if (ch === "\n")
+                else if (ch == "\n")
                 {
                     value = CsvScannerClass.endOfLine;
                 }
-                else if (ch === this._delimiter)
+                else if (ch == this._delimiter)
                 {
                     value = "";
                 }
@@ -103,12 +104,12 @@ module beachParty
                     {
                         var ch = text[offset++];
 
-                        if (ch === this._delimiter)
+                        if (ch == this._delimiter)
                         {
                             value = text.substr(start, offset - start - 1);
                             break;
                         }
-                        else if (ch === "\n")
+                        else if (ch == "\n")
                         {
                             //---- don't consume the newline until our next call ----
                             offset--;
@@ -125,9 +126,35 @@ module beachParty
             return value;
         }
 
+        justPassedDelimiter()
+        {
+            var lastOffset = this._offset - 1;
+            var text = this._text;
+
+            return (lastOffset >= 0 && lastOffset < text.length && text[lastOffset] === this._delimiter);
+        }
+
         endOfFile()
         {
             return (this._offset >= this._text.length);
         }
     }
-} 
+
+    function testCsvScanner()
+    {
+        var scanner = new CsvScannerClass('abc;def;ghi\n1;2;3\naaa;"bbb";ccc\naaa;"bb""bb";ccc\n', ";", "\"");
+        
+        while (true)
+        {
+            var value = scanner.scan();
+            vp.utils.debug("csvScan: value=" + value);
+
+            if (value == CsvScannerClass.endOfFile)
+            {
+                break;
+            }
+        }
+    }
+
+    //testCsvScanner();
+}

@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    densityGrid.ts - builds a density chart (2D histogram, with grid layout within each heatmap tile). 
 //-------------------------------------------------------------------------------------
 
@@ -55,6 +55,10 @@ module beachParty
             if (facetHelper)
             {
                 var facetCount = facetHelper.facetCount();
+
+                //---- compute min/max over all data for consistent facet binning ----
+                ChartUtils.setFilteredMinMaxBreak(xm, dc.layoutFilterVector, dc.nvData.x);
+                ChartUtils.setFilteredMinMaxBreak(ym, dc.layoutFilterVector, dc.nvData.y);
 
                 for (var i = 0; i < facetCount; i++)
                 {
@@ -239,7 +243,7 @@ module beachParty
 
         }
 
-        layoutDataForRecord(recordIndex: number, dc: DrawContext)
+        layoutDataForRecord(recordIndex: number, dc: DrawContext, dr: bps.LayoutResult)
         {
             var nv = dc.nvData;
             var rowIndex = 0;
@@ -260,70 +264,39 @@ module beachParty
             var cx = left + this._itemWidth / 2;
             var cy = top - this._itemHeight / 2;
 
-            //var cx = this._center.x;
-            //var cy = this._center.y;
-
             var binRelativeIndex = this._binRelativeIndexes[recordIndex]-1;
 
             var countKey = binIndexX + "," + binIndexY;
 
             var binCount = 0;
-            if (this._binCounts[countKey] === undefined || this._binCounts[countKey] === null) {
+            if (this._binCounts[countKey] === undefined) 
+            {
                 binCount = 0;
-            } else {
+            }
+            else
+            {
                 binCount = this._binCounts[countKey];
             }
 
-/*
-            var xglobalmax = Math.max(Math.ceil(Math.sqrt(this._maxCount)), 1);
-            var yglobalmax = Math.max(Math.ceil(this._maxCount / xglobalmax), 1);
-            var xspace = this._itemWidth / xglobalmax;
-            var yspace = this._itemHeight / yglobalmax;
-
-            var xrel = binRelativeIndex % xglobalmax;
-            var yrel = Math.floor(binRelativeIndex / yglobalmax);
-
-            var x = left + xrel * xspace;
-            var y = top - yrel * yspace;
-  */
-
             var xlocalmax = Math.max(Math.ceil(Math.sqrt(binCount)), 1);
             var ylocalmax = Math.max(Math.ceil(binCount / xlocalmax), 1);
-            /*
-            var maxWidth = xlocalmax * this._xspace;
-            var maxHeight = ylocalmax * this._yspace;
-*/
+
             var maxWidth = xlocalmax * this._space;
             var maxHeight = ylocalmax * this._space;
 
             var xrel = binRelativeIndex % xlocalmax;
             var yrel = Math.floor(binRelativeIndex / xlocalmax);
 
-            /*
-            var x = cx + this._hMargin - maxWidth / 2 + xrel * this._xspace;
-            var y = cy - this._vMargin + maxHeight/2 - yrel * this._yspace;
-*/
+            dr.x = cx - maxWidth / 2.0 + xrel * this._space;
+            dr.y = cy + maxHeight / 2.0 - yrel * this._space;
+            dr.z = 0;
 
-            var width = this._maxShapeSize;
-            var height = width;
-            var depth = dc.defaultDepth2d   ;
+            dr.width = this._maxShapeSize;
+            dr.height = dr.width;
+            dr.depth = dc.defaultDepth2d   
 
-            var x = cx - maxWidth/ 2.0 + xrel * this._space ;
-            var y = cy + maxHeight/2.0 - yrel * this._space ;
-
-            var z = 0;
-            // var width = 1;      // scales.width._rangeMin;
-            // var height = width;
-
-            var colorIndex = this.scaleColData(nv.colorIndex, recordIndex, dc.scales.colorIndex);
-            var imageIndex = this.scaleColData(nv.imageIndex, recordIndex, dc.scales.imageIndex);
-            var opacity = 1;
-
-            return {
-                x: x, y: y, z: z, width: width, height: height, depth: depth, colorIndex: colorIndex, opacity: opacity,
-                imageIndex: imageIndex, theta: 0,
-            };
-
+            dr.colorIndex = this.scaleColData(nv.colorIndex, recordIndex, dc.scales.colorIndex);
+            dr.imageIndex = this.scaleColData(nv.imageIndex, recordIndex, dc.scales.imageIndex);
         }
     }
 

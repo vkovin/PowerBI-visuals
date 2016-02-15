@@ -1,5 +1,5 @@
 ﻿//-------------------------------------------------------------------------------------
-//  Copyright (c) 2015 - Microsoft Corporation.
+//  Copyright (c) 2016 - Microsoft Corporation.
 //    boundingBoxMgr.ts - manages the set of bounding boxes as a set of arrays, for minimizing the memory usage.
 //-------------------------------------------------------------------------------------
 

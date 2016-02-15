@@ -291,16 +291,16 @@ module beachParty
             return (palettes);
         }
 
-        protected static getRgbColorArrayFromRgbColorString(rgbColorString: string): number[]
+        private static getRgbColorArrayFromRgbColorString(rgbColorString: string): number[]
         {
             var colorsArray = rgbColorString.replace("rgb(", "").replace(")", "").split(','); // rgbColorStrings is an array of string of the form "rgb(rrr, ggg, bbb)"
             var rgbArray: number[] = [];
 
-            if (colorsArray.length === 3)
+            if (colorsArray.length == 3)
             {
-                rgbArray.push(parseInt(colorsArray[0], 0));
-                rgbArray.push(parseInt(colorsArray[1], 0));
-                rgbArray.push(parseInt(colorsArray[2], 0));
+                rgbArray.push(parseInt(colorsArray[0]));
+                rgbArray.push(parseInt(colorsArray[1]));
+                rgbArray.push(parseInt(colorsArray[2]));
             }
             else
             {
