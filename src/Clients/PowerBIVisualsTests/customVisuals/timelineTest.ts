@@ -47,8 +47,8 @@ module powerbitests.customVisuals {
                 visualBuilder.currentPeriod = 3;//select a day period
                 setTimeout(() => {
                     let countOfDays = visualBuilder.mainElement.children("g.mainArea").children(".cellsArea").children(".cellRect").length;
-                    let countOfTextItems = visualBuilder.mainElement.children("g.mainArea").children(".lowerTextArea").children(".lowerTextCell").length;
-
+					let countOfTextItems = visualBuilder.mainElement.children("g.mainArea").children(".lowerTextArea").children().length;
+		
                     expect(countOfDays).toBe(dataViews[0].categorical.categories[0].values.length);
                     expect(countOfTextItems).toBe(dataViews[0].categorical.categories[0].values.length);
 
@@ -59,7 +59,7 @@ module powerbitests.customVisuals {
     });
 
     class TimelineBuilder extends VisualBuilderBase<VisualClass> {
-        constructor(height: number = 300, width: number = 400, isMinervaVisualPlugin: boolean = false) {
+        constructor(height: number = 400, width: number = 600, isMinervaVisualPlugin: boolean = false) {
             super(height, width, isMinervaVisualPlugin);
             this.build();
             this.init();
