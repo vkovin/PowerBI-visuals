@@ -1083,7 +1083,7 @@ module powerbi.visuals.samples {
 			});
 
 			this.svg.attr({
-				height: Math.max(0, options.viewport.height - this.timelineMargins.TopMargin), 
+				height: Math.max(0, options.viewport.height - this.timelineMargins.TopMargin),
 				width: svgWidth
 			});
 
